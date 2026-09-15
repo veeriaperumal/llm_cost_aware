@@ -1,12 +1,22 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from config.settings import settings
 from app.api.routes import router as api_router
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    from app.database import init_db
+    await init_db()
+    yield
+
+
 app = FastAPI(
     title="Cost-Aware Multi-Tier Cascading Router API",
     description="Intelligent LLM Router with Confidence Gates, Dynamic Escalation, and Cost Audit Ledger.",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(

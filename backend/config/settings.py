@@ -72,7 +72,31 @@ class Settings(BaseModel):
         load_dotenv(override=True)
         return os.getenv("OPENAI_API_KEY", "").strip()
 
-    # Pricing catalog in USD per 1 Million Tokens
+    @property
+    def database_url(self) -> str:
+        load_dotenv(override=True)
+        raw_url = (
+            os.getenv("DATABASE_URL")
+            or os.getenv("POSTGRES_URL")
+            or os.getenv("POSTGRESQL_URL")
+            or os.getenv("PG_URL")
+            or ""
+        ).strip()
+        if not raw_url:
+            data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+            os.makedirs(data_dir, exist_ok=True)
+            db_path = os.path.join(data_dir, "cost_aware.db").replace("\\", "/")
+            return f"sqlite+aiosqlite:///{db_path}"
+        # Normalize postgres protocol for async SQLAlchemy
+        if raw_url.startswith("postgres://"):
+            raw_url = "postgresql+asyncpg://" + raw_url[len("postgres://"):]
+        elif raw_url.startswith("postgresql://") and not raw_url.startswith("postgresql+"):
+            raw_url = "postgresql+asyncpg://" + raw_url[len("postgresql://"):]
+        elif raw_url.startswith("sqlite://") and not raw_url.startswith("sqlite+"):
+            raw_url = "sqlite+aiosqlite://" + raw_url[len("sqlite://"):]
+        return raw_url
+
+    # Pricing catalog in USD per 1 Million Tokens (fallback if DB unavailable)
     pricing_catalog: Dict[str, Dict[str, ModelPricing]] = {
         "anthropic": {
             "tier1": ModelPricing(

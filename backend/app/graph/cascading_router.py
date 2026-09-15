@@ -45,9 +45,13 @@ class CascadingRouter:
         provider = (request.provider or settings.default_provider).lower()
         threshold = request.confidence_threshold if request.confidence_threshold is not None else settings.confidence_threshold
 
-        provider_catalog = settings.pricing_catalog.get(provider, settings.pricing_catalog["mock"])
-        tier1_meta = provider_catalog.get("tier1", provider_catalog["tier1"])
-        tier2_meta = provider_catalog.get("tier2", provider_catalog["tier2"])
+        tier1_model_info = await LLMProviderClient.get_model_for_provider(provider, "tier1")
+        tier2_model_info = await LLMProviderClient.get_model_for_provider(provider, "tier2")
+
+        tier1_model_id = tier1_model_info[0] if tier1_model_info else None
+        tier1_display_name = tier1_model_info[2] if tier1_model_info else f"{provider} tier1"
+        tier2_model_id = tier2_model_info[0] if tier2_model_info else None
+        tier2_display_name = tier2_model_info[2] if tier2_model_info else f"{provider} tier2"
 
         traces: List[ModelExecutionTrace] = []
 
@@ -59,7 +63,7 @@ class CascadingRouter:
             prompt=request.prompt
         )
 
-        tier1_cost = CostTracker.calculate_model_cost(
+        tier1_cost, tier1_pricing_id = await CostTracker.calculate_model_cost(
             provider=provider,
             tier="tier1",
             input_tokens=tier1_tokens.input_tokens,
@@ -67,7 +71,7 @@ class CascadingRouter:
         )
 
         tier1_trace = ModelExecutionTrace(
-            model_name=tier1_meta.name,
+            model_name=tier1_display_name,
             tier="tier1",
             prompt=request.prompt,
             response_text=tier1_draft,
@@ -75,7 +79,9 @@ class CascadingRouter:
             uncertainty_reasons=tier1_uncertainties,
             tokens=tier1_tokens,
             cost_usd=tier1_cost,
-            latency_ms=tier1_latency
+            latency_ms=tier1_latency,
+            model_id=tier1_model_id,
+            pricing_id=tier1_pricing_id,
         )
         traces.append(tier1_trace)
 
@@ -110,7 +116,7 @@ class CascadingRouter:
         tier2_tokens = TokenMetrics()
         final_answer = tier1_draft
         served_by_tier = "tier1"
-        served_by_model = tier1_meta.name
+        served_by_model = tier1_display_name
 
         if should_escalate:
             tier2_answer, tier2_tokens, tier2_latency = await LLMProviderClient.execute_tier2(
@@ -121,7 +127,7 @@ class CascadingRouter:
                 uncertainty_reasons=tier1_uncertainties
             )
 
-            tier2_cost = CostTracker.calculate_model_cost(
+            tier2_cost, tier2_pricing_id = await CostTracker.calculate_model_cost(
                 provider=provider,
                 tier="tier2",
                 input_tokens=tier2_tokens.input_tokens,
@@ -129,7 +135,7 @@ class CascadingRouter:
             )
 
             tier2_trace = ModelExecutionTrace(
-                model_name=tier2_meta.name,
+                model_name=tier2_display_name,
                 tier="tier2",
                 prompt=f"Escalation context with Draft: {tier1_draft[:100]}...",
                 response_text=tier2_answer,
@@ -137,18 +143,20 @@ class CascadingRouter:
                 uncertainty_reasons=[],
                 tokens=tier2_tokens,
                 cost_usd=tier2_cost,
-                latency_ms=tier2_latency
+                latency_ms=tier2_latency,
+                model_id=tier2_model_id,
+                pricing_id=tier2_pricing_id,
             )
             traces.append(tier2_trace)
 
             final_answer = tier2_answer
             served_by_tier = "tier2"
-            served_by_model = tier2_meta.name
+            served_by_model = tier2_display_name
 
         # ---------------------------------------------------------------------
         # STEP 4: Calculate Cost Breakdown & Audit Justification
         # ---------------------------------------------------------------------
-        cost_breakdown = CostTracker.calculate_cost_breakdown(
+        cost_breakdown = await CostTracker.calculate_cost_breakdown(
             provider=provider,
             tier1_tokens=tier1_tokens,
             tier2_tokens=tier2_tokens,
@@ -189,7 +197,9 @@ class CascadingRouter:
             total_tokens=tier1_tokens.total_tokens + tier2_tokens.total_tokens,
             total_cost_usd=cost_breakdown.total_cost_usd,
             savings_usd=cost_breakdown.savings_usd,
-            spend_justification=cost_breakdown.spend_justification
+            spend_justification=cost_breakdown.spend_justification,
+            tier1_pricing_id=cost_breakdown.tier1_pricing_id,
+            tier2_pricing_id=cost_breakdown.tier2_pricing_id,
         )
         history_store.add(history_item)
 

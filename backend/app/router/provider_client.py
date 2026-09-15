@@ -16,8 +16,35 @@ except ImportError:
     from config.settings import settings
     from app.models.schemas import TokenMetrics, ModelExecutionTrace
 
+
 class LLMProviderClient:
     """Multi-provider client executing Tier 1 and Tier 2 LLM inference dynamically with confidence extraction."""
+
+    @staticmethod
+    async def get_model_for_provider(provider: str, tier: str):
+        """Query DB for model metadata. Returns (model_id, model_name, display_name) or None."""
+        try:
+            from sqlalchemy import select
+            from app.database import async_session
+            from app.models.db_models import LLMModel
+
+            async with async_session() as session:
+                stmt = (
+                    select(LLMModel)
+                    .where(
+                        LLMModel.provider_name == provider,
+                        LLMModel.tier == tier,
+                        LLMModel.active == True,
+                    )
+                    .limit(1)
+                )
+                result = await session.execute(stmt)
+                model = result.scalars().first()
+                if model:
+                    return (model.id, model.model_name, model.display_name)
+        except Exception:
+            pass
+        return None
     
     @staticmethod
     def _estimate_tokens(text: str) -> int:
