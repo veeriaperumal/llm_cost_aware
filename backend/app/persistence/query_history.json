@@ -1,5 +1,95 @@
 [
   {
+    "id": "qry_f2935162ca",
+    "timestamp": "2026-09-15 17:42:22 UTC",
+    "prompt": "What is 5+5?",
+    "final_answer": "5 + 5 = 10",
+    "provider": "gemini",
+    "served_by_model": "Gemini 2.5 Flash",
+    "served_by_tier": "tier1",
+    "confidence": 1.0,
+    "escalated": false,
+    "escalation_reason": null,
+    "total_tokens": 176,
+    "total_cost_usd": 2.2e-05,
+    "savings_usd": 0.0,
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (1.00 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000000 (0.0%).",
+    "tier1_pricing_id": "291ce3f7-6a33-4386-98c9-71d64db7611a",
+    "tier2_pricing_id": null
+  },
+  {
+    "id": "qry_b46f0d8ab2",
+    "timestamp": "2026-09-15 17:40:07 UTC",
+    "prompt": "Simple question",
+    "final_answer": "Authoritative Synthesis (Tier 2) for: 'Simple question'\n\nEscalation Reason: forced_override\n\nContext Review: Evaluated preliminary Tier 1 draft and resolved all identified uncertainties with rigorous verification.",
+    "provider": "mock",
+    "served_by_model": "Claude 3.5 Sonnet (Simulated)",
+    "served_by_tier": "tier2",
+    "confidence": 0.92,
+    "escalated": true,
+    "escalation_reason": "forced_override",
+    "total_tokens": 281,
+    "total_cost_usd": 0.001657,
+    "savings_usd": -0.000406,
+    "spend_justification": "Extra spend incurred: Tier 1 confidence was 0.92 (below threshold 0.75). Escalated to Tier 2 with reason 'forced_override' to guarantee answer accuracy for a complex inquiry.",
+    "tier1_pricing_id": "33712c0e-2b65-4529-944c-c43cb08fb825",
+    "tier2_pricing_id": "73d928b7-8ea6-4a52-88c6-1b18d6dbd299"
+  },
+  {
+    "id": "qry_26e68a953c",
+    "timestamp": "2026-09-15 17:40:07 UTC",
+    "prompt": "How to design a distributed consensus algorithm with high throughput and low latency tradeoff proof?",
+    "final_answer": "Authoritative Synthesis (Tier 2) for: 'How to design a distributed consensus algorithm with high throughput and low latency tradeoff proof?'\n\nEscalation Reason: low_confidence\n\nContext Review: Evaluated preliminary Tier 1 draft and resolved all identified uncertainties with rigorous verification.",
+    "provider": "mock",
+    "served_by_model": "Claude 3.5 Sonnet (Simulated)",
+    "served_by_tier": "tier2",
+    "confidence": 0.61,
+    "escalated": true,
+    "escalation_reason": "low_confidence",
+    "total_tokens": 368,
+    "total_cost_usd": 0.0021,
+    "savings_usd": -0.00054,
+    "spend_justification": "Extra spend incurred: Tier 1 confidence was 0.61 (below threshold 0.75). Escalated to Tier 2 with reason 'low_confidence' to guarantee answer accuracy for a complex inquiry.",
+    "tier1_pricing_id": "33712c0e-2b65-4529-944c-c43cb08fb825",
+    "tier2_pricing_id": "73d928b7-8ea6-4a52-88c6-1b18d6dbd299"
+  },
+  {
+    "id": "qry_5dc7046b7f",
+    "timestamp": "2026-09-15 17:40:07 UTC",
+    "prompt": "What is the capital of France?",
+    "final_answer": "Direct resolution for: 'What is the capital of France?'.\n\nEvaluated with high confidence using standard engineering principles and verified best practices.",
+    "provider": "mock",
+    "served_by_model": "Claude 3.5 Haiku (Simulated)",
+    "served_by_tier": "tier1",
+    "confidence": 0.92,
+    "escalated": false,
+    "escalation_reason": null,
+    "total_tokens": 116,
+    "total_cost_usd": 0.000278,
+    "savings_usd": 0.000766,
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.92 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000766 (73.37%).",
+    "tier1_pricing_id": "33712c0e-2b65-4529-944c-c43cb08fb825",
+    "tier2_pricing_id": null
+  },
+  {
+    "id": "qry_c1bd3998fe",
+    "timestamp": "2026-09-15 17:32:32 UTC",
+    "prompt": "What is 2+2?",
+    "final_answer": "Direct resolution for: 'What is 2+2?'.\n\nEvaluated with high confidence using standard engineering principles and verified best practices.",
+    "provider": "mock",
+    "served_by_model": "Claude 3.5 Haiku (Simulated)",
+    "served_by_tier": "tier1",
+    "confidence": 0.92,
+    "escalated": false,
+    "escalation_reason": null,
+    "total_tokens": 108,
+    "total_cost_usd": 0.000259,
+    "savings_usd": 0.000713,
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.92 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000713 (73.35%).",
+    "tier1_pricing_id": "33712c0e-2b65-4529-944c-c43cb08fb825",
+    "tier2_pricing_id": null
+  },
+  {
     "id": "qry_6cf7cdb50c",
     "timestamp": "2026-09-15 16:39:50 UTC",
     "prompt": "LMS tool architecture infrastructure . i need like hackerrank,leetcode. constraint i need architecture diagram, infra steps, why we choose this \n",
@@ -13,7 +103,9 @@
     "total_tokens": 4512,
     "total_cost_usd": 0.001018,
     "savings_usd": -0.000502,
-    "spend_justification": "Extra spend incurred: Tier 1 confidence was 0.60 (below threshold 0.75). Escalated to Tier 2 with reason 'low_confidence' to guarantee answer accuracy for a complex inquiry."
+    "spend_justification": "Extra spend incurred: Tier 1 confidence was 0.60 (below threshold 0.75). Escalated to Tier 2 with reason 'low_confidence' to guarantee answer accuracy for a complex inquiry.",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_47899adeb4",
@@ -29,7 +121,9 @@
     "total_tokens": 713,
     "total_cost_usd": 0.000182,
     "savings_usd": 0.0,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (1.00 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000000 (0.0%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (1.00 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000000 (0.0%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_e261fd25b3",
@@ -45,7 +139,9 @@
     "total_tokens": 178,
     "total_cost_usd": 2.2e-05,
     "savings_usd": 0.0,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (1.00 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000000 (0.0%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (1.00 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000000 (0.0%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_ad59405a6f",
@@ -61,7 +157,9 @@
     "total_tokens": 457,
     "total_cost_usd": 0.000107,
     "savings_usd": 0.0,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (1.00 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000000 (0.0%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (1.00 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000000 (0.0%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_887f831bfb",
@@ -77,7 +175,9 @@
     "total_tokens": 688,
     "total_cost_usd": 0.000176,
     "savings_usd": 0.0,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (1.00 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000000 (0.0%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (1.00 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000000 (0.0%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_196e21248f",
@@ -93,7 +193,9 @@
     "total_tokens": 188,
     "total_cost_usd": 2.4e-05,
     "savings_usd": 0.0,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (1.00 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000000 (0.0%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (1.00 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000000 (0.0%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_964a190c82",
@@ -109,7 +211,9 @@
     "total_tokens": 210,
     "total_cost_usd": 3.1e-05,
     "savings_usd": 0.0,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (1.00 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000000 (0.0%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (1.00 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000000 (0.0%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_2228c1ccc7",
@@ -125,7 +229,9 @@
     "total_tokens": 132,
     "total_cost_usd": 0.000317,
     "savings_usd": 0.000871,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.92 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000871 (73.32%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.92 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000871 (73.32%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_ef3489ee4f",
@@ -141,7 +247,9 @@
     "total_tokens": 132,
     "total_cost_usd": 0.000317,
     "savings_usd": 0.000871,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.92 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000871 (73.32%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.92 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000871 (73.32%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_fd46b92148",
@@ -157,7 +265,9 @@
     "total_tokens": 116,
     "total_cost_usd": 0.000278,
     "savings_usd": 0.000766,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.92 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000766 (73.37%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.92 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000766 (73.37%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_2c311c9086",
@@ -173,7 +283,9 @@
     "total_tokens": 2215,
     "total_cost_usd": 0.000171,
     "savings_usd": 0.001536,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.97 >= 0.75). Avoided costly Tier 2 invocation, saving $0.001536 (89.98%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.97 >= 0.75). Avoided costly Tier 2 invocation, saving $0.001536 (89.98%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_c6ef893723",
@@ -189,7 +301,9 @@
     "total_tokens": 1097,
     "total_cost_usd": 0.003918,
     "savings_usd": 0.010773,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.85 >= 0.75). Avoided costly Tier 2 invocation, saving $0.010773 (73.33%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.85 >= 0.75). Avoided costly Tier 2 invocation, saving $0.010773 (73.33%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_7e24b15e37",
@@ -205,7 +319,9 @@
     "total_tokens": 174,
     "total_cost_usd": 0.000254,
     "savings_usd": 0.0007,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (1.00 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000700 (73.38%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (1.00 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000700 (73.38%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_0bfa486674",
@@ -221,7 +337,9 @@
     "total_tokens": 214,
     "total_cost_usd": 4.5e-05,
     "savings_usd": 0.0,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.93 >= 0.85). Avoided costly Tier 2 invocation, saving $0.000000 (0.0%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.93 >= 0.85). Avoided costly Tier 2 invocation, saving $0.000000 (0.0%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_6c20d6a679",
@@ -237,7 +355,9 @@
     "total_tokens": 194,
     "total_cost_usd": 3.8e-05,
     "savings_usd": 0.0,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.92 >= 0.85). Avoided costly Tier 2 invocation, saving $0.000000 (0.0%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.92 >= 0.85). Avoided costly Tier 2 invocation, saving $0.000000 (0.0%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_99484ab270",
@@ -253,7 +373,9 @@
     "total_tokens": 315,
     "total_cost_usd": 7.5e-05,
     "savings_usd": 0.0,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.95 >= 0.85). Avoided costly Tier 2 invocation, saving $0.000000 (0.0%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.95 >= 0.85). Avoided costly Tier 2 invocation, saving $0.000000 (0.0%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_1988a5e0a7",
@@ -269,7 +391,9 @@
     "total_tokens": 917,
     "total_cost_usd": 0.000253,
     "savings_usd": 0.0,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.95 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000000 (0.0%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.95 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000000 (0.0%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_381991b268",
@@ -285,7 +409,9 @@
     "total_tokens": 145,
     "total_cost_usd": 2.4e-05,
     "savings_usd": 0.0,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.92 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000000 (0.0%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.92 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000000 (0.0%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_393ccdd451",
@@ -301,7 +427,9 @@
     "total_tokens": 145,
     "total_cost_usd": 2.4e-05,
     "savings_usd": 0.0,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.92 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000000 (0.0%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.92 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000000 (0.0%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_f59fcd722c",
@@ -317,7 +445,9 @@
     "total_tokens": 809,
     "total_cost_usd": 0.000184,
     "savings_usd": -3.7e-05,
-    "spend_justification": "Extra spend incurred: Tier 1 confidence was 0.61 (below threshold 0.75). Escalated to Tier 2 with reason 'low_confidence' to guarantee answer accuracy for a complex inquiry."
+    "spend_justification": "Extra spend incurred: Tier 1 confidence was 0.61 (below threshold 0.75). Escalated to Tier 2 with reason 'low_confidence' to guarantee answer accuracy for a complex inquiry.",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_25bb3332a5",
@@ -333,7 +463,9 @@
     "total_tokens": 153,
     "total_cost_usd": 2.6e-05,
     "savings_usd": 0.0,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.92 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000000 (0.0%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.92 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000000 (0.0%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_4f1432c279",
@@ -349,7 +481,9 @@
     "total_tokens": 153,
     "total_cost_usd": 2.6e-05,
     "savings_usd": 0.0,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.92 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000000 (0.0%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.92 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000000 (0.0%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_59e29e7eb0",
@@ -365,7 +499,9 @@
     "total_tokens": 153,
     "total_cost_usd": 2.6e-05,
     "savings_usd": 0.0,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.92 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000000 (0.0%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.92 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000000 (0.0%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_22c4eda807",
@@ -381,7 +517,9 @@
     "total_tokens": 153,
     "total_cost_usd": 2.6e-05,
     "savings_usd": 0.0,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.92 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000000 (0.0%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.92 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000000 (0.0%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_390f0e5e37",
@@ -397,7 +535,9 @@
     "total_tokens": 153,
     "total_cost_usd": 1e-05,
     "savings_usd": 9.3e-05,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.92 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000093 (90.29%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.92 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000093 (90.29%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_d76e2c8210",
@@ -413,7 +553,9 @@
     "total_tokens": 153,
     "total_cost_usd": 2.6e-05,
     "savings_usd": 0.0,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.92 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000000 (0.0%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.92 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000000 (0.0%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_b25b47b933",
@@ -429,7 +571,9 @@
     "total_tokens": 153,
     "total_cost_usd": 2.6e-05,
     "savings_usd": 0.0,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.92 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000000 (0.0%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.92 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000000 (0.0%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_9026d63a97",
@@ -445,7 +589,9 @@
     "total_tokens": 145,
     "total_cost_usd": 4.9e-05,
     "savings_usd": 0.000764,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.92 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000764 (93.97%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.92 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000764 (93.97%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_3f120c928f",
@@ -461,7 +607,9 @@
     "total_tokens": 159,
     "total_cost_usd": 2.7e-05,
     "savings_usd": 0.000423,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.92 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000423 (94.0%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.92 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000423 (94.0%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_72256345e6",
@@ -477,7 +625,9 @@
     "total_tokens": 143,
     "total_cost_usd": 2e-05,
     "savings_usd": 0.00032,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (1.00 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000320 (94.12%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (1.00 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000320 (94.12%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_62dd38de6a",
@@ -493,7 +643,9 @@
     "total_tokens": 145,
     "total_cost_usd": 2.4e-05,
     "savings_usd": 0.000382,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.92 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000382 (94.09%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.92 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000382 (94.09%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_18c1320012",
@@ -509,7 +661,9 @@
     "total_tokens": 143,
     "total_cost_usd": 2.4e-05,
     "savings_usd": 0.000376,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.92 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000376 (94.0%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.92 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000376 (94.0%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_ec1a125974",
@@ -525,7 +679,9 @@
     "total_tokens": 445,
     "total_cost_usd": 0.000113,
     "savings_usd": 0.001775,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.94 >= 0.75). Avoided costly Tier 2 invocation, saving $0.001775 (94.01%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.94 >= 0.75). Avoided costly Tier 2 invocation, saving $0.001775 (94.01%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_a7cbe647ea",
@@ -541,7 +697,9 @@
     "total_tokens": 156,
     "total_cost_usd": 1e-05,
     "savings_usd": 9.5e-05,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.94 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000095 (90.48%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.94 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000095 (90.48%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_35edfea57b",
@@ -557,7 +715,9 @@
     "total_tokens": 457,
     "total_cost_usd": 0.003265,
     "savings_usd": -0.000499,
-    "spend_justification": "Extra spend incurred: Tier 1 confidence was 0.94 (below threshold 0.75). Escalated to Tier 2 with reason 'forced_override' to guarantee answer accuracy for a complex inquiry."
+    "spend_justification": "Extra spend incurred: Tier 1 confidence was 0.94 (below threshold 0.75). Escalated to Tier 2 with reason 'forced_override' to guarantee answer accuracy for a complex inquiry.",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_700376e01c",
@@ -573,7 +733,9 @@
     "total_tokens": 576,
     "total_cost_usd": 0.003819,
     "savings_usd": -0.000744,
-    "spend_justification": "Extra spend incurred: Tier 1 confidence was 0.61 (below threshold 0.75). Escalated to Tier 2 with reason 'low_confidence' to guarantee answer accuracy for a complex inquiry."
+    "spend_justification": "Extra spend incurred: Tier 1 confidence was 0.61 (below threshold 0.75). Escalated to Tier 2 with reason 'low_confidence' to guarantee answer accuracy for a complex inquiry.",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_d06a438b81",
@@ -589,7 +751,9 @@
     "total_tokens": 151,
     "total_cost_usd": 0.000322,
     "savings_usd": 0.000887,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.94 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000887 (73.37%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.94 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000887 (73.37%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_c06470992a",
@@ -605,7 +769,9 @@
     "total_tokens": 516,
     "total_cost_usd": 0.003509,
     "savings_usd": -0.00065,
-    "spend_justification": "Extra spend incurred: Tier 1 confidence was 0.61 (below threshold 0.75). Escalated to Tier 2 with reason 'low_confidence' to guarantee answer accuracy for a complex inquiry."
+    "spend_justification": "Extra spend incurred: Tier 1 confidence was 0.61 (below threshold 0.75). Escalated to Tier 2 with reason 'low_confidence' to guarantee answer accuracy for a complex inquiry.",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_f935ecd15b",
@@ -621,7 +787,9 @@
     "total_tokens": 151,
     "total_cost_usd": 0.000322,
     "savings_usd": 0.000887,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.94 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000887 (73.37%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.94 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000887 (73.37%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_8384fca18d",
@@ -637,7 +805,9 @@
     "total_tokens": 148,
     "total_cost_usd": 0.000317,
     "savings_usd": 0.000871,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.94 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000871 (73.32%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.94 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000871 (73.32%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_e57ad33640",
@@ -653,7 +823,9 @@
     "total_tokens": 516,
     "total_cost_usd": 0.003509,
     "savings_usd": -0.00065,
-    "spend_justification": "Extra spend incurred: Tier 1 confidence was 0.61 (below threshold 0.75). Escalated to Tier 2 with reason 'low_confidence' to guarantee answer accuracy for a complex inquiry."
+    "spend_justification": "Extra spend incurred: Tier 1 confidence was 0.61 (below threshold 0.75). Escalated to Tier 2 with reason 'low_confidence' to guarantee answer accuracy for a complex inquiry.",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_e3e6d5a263",
@@ -669,7 +841,9 @@
     "total_tokens": 151,
     "total_cost_usd": 0.000322,
     "savings_usd": 0.000887,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.94 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000887 (73.37%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.94 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000887 (73.37%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_4f8feb24de",
@@ -685,7 +859,9 @@
     "total_tokens": 148,
     "total_cost_usd": 0.000317,
     "savings_usd": 0.000871,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.94 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000871 (73.32%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.94 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000871 (73.32%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_13ae4597ec",
@@ -701,7 +877,9 @@
     "total_tokens": 601,
     "total_cost_usd": 0.003948,
     "savings_usd": -0.000783,
-    "spend_justification": "Extra spend incurred: Tier 1 confidence was 0.61 (below threshold 0.75). Escalated to Tier 2 with reason 'low_confidence' to guarantee answer accuracy for a complex inquiry."
+    "spend_justification": "Extra spend incurred: Tier 1 confidence was 0.61 (below threshold 0.75). Escalated to Tier 2 with reason 'low_confidence' to guarantee answer accuracy for a complex inquiry.",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_94bfd84153",
@@ -717,7 +895,9 @@
     "total_tokens": 457,
     "total_cost_usd": 0.003265,
     "savings_usd": -0.000499,
-    "spend_justification": "Extra spend incurred: Tier 1 confidence was 0.94 (below threshold 0.75). Escalated to Tier 2 with reason 'forced_override' to guarantee answer accuracy for a complex inquiry."
+    "spend_justification": "Extra spend incurred: Tier 1 confidence was 0.94 (below threshold 0.75). Escalated to Tier 2 with reason 'forced_override' to guarantee answer accuracy for a complex inquiry.",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_cc5a9125a8",
@@ -733,7 +913,9 @@
     "total_tokens": 576,
     "total_cost_usd": 0.003819,
     "savings_usd": -0.000744,
-    "spend_justification": "Extra spend incurred: Tier 1 confidence was 0.61 (below threshold 0.75). Escalated to Tier 2 with reason 'low_confidence' to guarantee answer accuracy for a complex inquiry."
+    "spend_justification": "Extra spend incurred: Tier 1 confidence was 0.61 (below threshold 0.75). Escalated to Tier 2 with reason 'low_confidence' to guarantee answer accuracy for a complex inquiry.",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_c59d7912c2",
@@ -749,7 +931,9 @@
     "total_tokens": 151,
     "total_cost_usd": 0.000322,
     "savings_usd": 0.000887,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.94 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000887 (73.37%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.94 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000887 (73.37%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_cdd759a095",
@@ -765,7 +949,9 @@
     "total_tokens": 457,
     "total_cost_usd": 0.003265,
     "savings_usd": -0.000499,
-    "spend_justification": "Extra spend incurred: Tier 1 confidence was 0.94 (below threshold 0.75). Escalated to Tier 2 with reason 'forced_override' to guarantee answer accuracy for a complex inquiry."
+    "spend_justification": "Extra spend incurred: Tier 1 confidence was 0.94 (below threshold 0.75). Escalated to Tier 2 with reason 'forced_override' to guarantee answer accuracy for a complex inquiry.",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_b7db990bde",
@@ -781,7 +967,9 @@
     "total_tokens": 576,
     "total_cost_usd": 0.003819,
     "savings_usd": -0.000744,
-    "spend_justification": "Extra spend incurred: Tier 1 confidence was 0.61 (below threshold 0.75). Escalated to Tier 2 with reason 'low_confidence' to guarantee answer accuracy for a complex inquiry."
+    "spend_justification": "Extra spend incurred: Tier 1 confidence was 0.61 (below threshold 0.75). Escalated to Tier 2 with reason 'low_confidence' to guarantee answer accuracy for a complex inquiry.",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   },
   {
     "id": "qry_5749b2c617",
@@ -797,6 +985,8 @@
     "total_tokens": 151,
     "total_cost_usd": 0.000322,
     "savings_usd": 0.000887,
-    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.94 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000887 (73.37%)."
+    "spend_justification": "Budget saved! Tier 1 solved with high confidence (0.94 >= 0.75). Avoided costly Tier 2 invocation, saving $0.000887 (73.37%).",
+    "tier1_pricing_id": null,
+    "tier2_pricing_id": null
   }
 ]

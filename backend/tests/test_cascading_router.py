@@ -57,15 +57,16 @@ async def test_forced_escalation():
     assert response.escalation.reason == "forced_override"
     assert response.served_by_tier == "tier2"
 
-def test_cost_tracker_calculation():
+@pytest.mark.asyncio
+async def test_cost_tracker_calculation():
     """Validate cost calculation for Haiku vs Sonnet tokens."""
     # 1,000 input tokens + 500 output tokens on Anthropic Haiku ($0.80 / $4.00 per 1M)
-    haiku_cost = CostTracker.calculate_model_cost("anthropic", "tier1", 1000, 500)
+    haiku_cost, _ = await CostTracker.calculate_model_cost("anthropic", "tier1", 1000, 500)
     expected_haiku = (1000 / 1_000_000 * 0.80) + (500 / 1_000_000 * 4.00)
     assert haiku_cost == round(expected_haiku, 6)
     
     # 1,000 input tokens + 500 output tokens on Anthropic Sonnet ($3.00 / $15.00 per 1M)
-    sonnet_cost = CostTracker.calculate_model_cost("anthropic", "tier2", 1000, 500)
+    sonnet_cost, _ = await CostTracker.calculate_model_cost("anthropic", "tier2", 1000, 500)
     expected_sonnet = (1000 / 1_000_000 * 3.00) + (500 / 1_000_000 * 15.00)
     assert sonnet_cost == round(expected_sonnet, 6)
     assert sonnet_cost > haiku_cost

@@ -24,6 +24,8 @@ class ModelExecutionTrace(BaseModel):
     tokens: TokenMetrics
     cost_usd: float
     latency_ms: float
+    model_id: Optional[str] = None
+    pricing_id: Optional[str] = None
 
 class EscalationEvent(BaseModel):
     escalated: bool
@@ -41,6 +43,8 @@ class CostBreakdown(BaseModel):
     savings_percent: float = 0.0
     currency: str = "USD"
     spend_justification: str  # Explains clearly why extra money was (or wasn't) spent
+    tier1_pricing_id: Optional[str] = None
+    tier2_pricing_id: Optional[str] = None
 
 class ChatResponse(BaseModel):
     id: str
@@ -70,6 +74,8 @@ class QueryHistoryItem(BaseModel):
     total_cost_usd: float
     savings_usd: float
     spend_justification: str
+    tier1_pricing_id: Optional[str] = None
+    tier2_pricing_id: Optional[str] = None
 
 class AnalyticsSummary(BaseModel):
     total_queries: int = 0
@@ -81,3 +87,30 @@ class AnalyticsSummary(BaseModel):
     tier1_handled_count: int = 0
     tier2_escalated_count: int = 0
     escalation_reasons_breakdown: Dict[str, int] = Field(default_factory=dict)
+
+
+class ModelPricingInfo(BaseModel):
+    id: str
+    input_price_per_million: float
+    output_price_per_million: float
+    cached_input_price_per_million: float = 0.0
+    currency: str = "USD"
+    effective_from: str
+    effective_to: Optional[str] = None
+
+
+class ModelInfo(BaseModel):
+    id: str
+    provider_name: str
+    model_name: str
+    display_name: str
+    tier: str
+    active: bool = True
+    context_window: int = 0
+    supports_tools: bool = False
+    supports_json: bool = False
+    supports_streaming: bool = True
+    supports_prompt_cache: bool = False
+    base_quality_score: float = 0.0
+    expected_latency_ms: int = 0
+    active_pricing: Optional[ModelPricingInfo] = None
