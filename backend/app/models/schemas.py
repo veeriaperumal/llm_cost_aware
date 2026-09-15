@@ -26,6 +26,8 @@ class ModelExecutionTrace(BaseModel):
     latency_ms: float
     model_id: Optional[str] = None
     pricing_id: Optional[str] = None
+    pareto_score: Optional[float] = None
+    pareto_rank: Optional[int] = None
 
 class EscalationEvent(BaseModel):
     escalated: bool
@@ -114,3 +116,5 @@ class ModelInfo(BaseModel):
     base_quality_score: float = 0.0
     expected_latency_ms: int = 0
     active_pricing: Optional[ModelPricingInfo] = None
+    pareto_score: Optional[float] = None
+    pareto_rank: Optional[int] = None

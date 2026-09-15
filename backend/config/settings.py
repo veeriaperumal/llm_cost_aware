@@ -96,6 +96,30 @@ class Settings(BaseModel):
             raw_url = "sqlite+aiosqlite://" + raw_url[len("sqlite://"):]
         return raw_url
 
+    @property
+    def pareto_quality_weight(self) -> float:
+        load_dotenv(override=True)
+        try:
+            return float(os.getenv("PARETO_QUALITY_WEIGHT", "0.4"))
+        except Exception:
+            return 0.4
+
+    @property
+    def pareto_latency_weight(self) -> float:
+        load_dotenv(override=True)
+        try:
+            return float(os.getenv("PARETO_LATENCY_WEIGHT", "0.3"))
+        except Exception:
+            return 0.3
+
+    @property
+    def pareto_cost_weight(self) -> float:
+        load_dotenv(override=True)
+        try:
+            return float(os.getenv("PARETO_COST_WEIGHT", "0.3"))
+        except Exception:
+            return 0.3
+
     # Pricing catalog in USD per 1 Million Tokens (fallback if DB unavailable)
     pricing_catalog: Dict[str, Dict[str, ModelPricing]] = {
         "anthropic": {

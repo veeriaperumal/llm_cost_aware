@@ -29,7 +29,7 @@ class LLMModel(Base):
     supports_prompt_cache = Column(Boolean, default=False)
     base_quality_score = Column(Float, default=0.0)
     expected_latency_ms = Column(Integer, default=0)
-    created_at = Column(DateTime, default=_now, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=_now, nullable=False)
 
     pricing = relationship("ModelPricing", back_populates="model", lazy="selectin")
 
@@ -43,8 +43,8 @@ class ModelPricing(Base):
     output_price_per_million = Column(Float, nullable=False)
     cached_input_price_per_million = Column(Float, default=0.0)
     currency = Column(String(10), default="USD", nullable=False)
-    effective_from = Column(DateTime, nullable=False)
-    effective_to = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=_now, nullable=False)
+    effective_from = Column(DateTime(timezone=True), nullable=False)
+    effective_to = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=_now, nullable=False)
 
     model = relationship("LLMModel", back_populates="pricing")

@@ -49,25 +49,33 @@ class CascadingRouter:
         tier2_model_info = await LLMProviderClient.get_model_for_provider(provider, "tier2")
 
         tier1_model_id = tier1_model_info[0] if tier1_model_info else None
+        tier1_model_name = tier1_model_info[1] if tier1_model_info else None
         tier1_display_name = tier1_model_info[2] if tier1_model_info else f"{provider} tier1"
+        tier1_pareto_provider = tier1_model_info[3] if tier1_model_info else provider
+
         tier2_model_id = tier2_model_info[0] if tier2_model_info else None
+        tier2_model_name = tier2_model_info[1] if tier2_model_info else None
         tier2_display_name = tier2_model_info[2] if tier2_model_info else f"{provider} tier2"
+        tier2_pareto_provider = tier2_model_info[3] if tier2_model_info else provider
+
+        active_provider = tier1_pareto_provider
 
         traces: List[ModelExecutionTrace] = []
 
         # ---------------------------------------------------------------------
-        # STEP 1: Execute Tier 1 Model (Haiku / Flash / Fast)
+        # STEP 1: Execute Tier 1 Model (Pareto-selected)
         # ---------------------------------------------------------------------
         tier1_draft, tier1_conf, tier1_uncertainties, tier1_tokens, tier1_latency = await LLMProviderClient.execute_tier1(
-            provider=provider,
+            provider=active_provider,
             prompt=request.prompt
         )
 
         tier1_cost, tier1_pricing_id = await CostTracker.calculate_model_cost(
-            provider=provider,
+            provider=active_provider,
             tier="tier1",
             input_tokens=tier1_tokens.input_tokens,
-            output_tokens=tier1_tokens.output_tokens
+            output_tokens=tier1_tokens.output_tokens,
+            model_id=tier1_model_id,
         )
 
         tier1_trace = ModelExecutionTrace(
@@ -111,7 +119,7 @@ class CascadingRouter:
         )
 
         # ---------------------------------------------------------------------
-        # STEP 3: Execute Tier 2 Model (Sonnet / Frontier) if Escalated
+        # STEP 3: Execute Tier 2 Model (Pareto-selected) if Escalated
         # ---------------------------------------------------------------------
         tier2_tokens = TokenMetrics()
         final_answer = tier1_draft
@@ -120,7 +128,7 @@ class CascadingRouter:
 
         if should_escalate:
             tier2_answer, tier2_tokens, tier2_latency = await LLMProviderClient.execute_tier2(
-                provider=provider,
+                provider=tier2_pareto_provider,
                 prompt=request.prompt,
                 tier1_draft=tier1_draft,
                 escalation_reason=escalation_reason or "low_confidence",
@@ -128,10 +136,11 @@ class CascadingRouter:
             )
 
             tier2_cost, tier2_pricing_id = await CostTracker.calculate_model_cost(
-                provider=provider,
+                provider=tier2_pareto_provider,
                 tier="tier2",
                 input_tokens=tier2_tokens.input_tokens,
-                output_tokens=tier2_tokens.output_tokens
+                output_tokens=tier2_tokens.output_tokens,
+                model_id=tier2_model_id,
             )
 
             tier2_trace = ModelExecutionTrace(
@@ -157,10 +166,12 @@ class CascadingRouter:
         # STEP 4: Calculate Cost Breakdown & Audit Justification
         # ---------------------------------------------------------------------
         cost_breakdown = await CostTracker.calculate_cost_breakdown(
-            provider=provider,
+            provider=active_provider,
             tier1_tokens=tier1_tokens,
             tier2_tokens=tier2_tokens,
-            escalation=escalation_event
+            escalation=escalation_event,
+            tier1_model_id=tier1_model_id,
+            tier2_model_id=tier2_model_id,
         )
 
         total_latency_ms = round((time.time() - total_start) * 1000, 2)
@@ -188,7 +199,7 @@ class CascadingRouter:
             timestamp=utc_now.strftime("%Y-%m-%d %H:%M:%S UTC"),
             prompt=request.prompt,
             final_answer=final_answer,
-            provider=provider,
+            provider=active_provider,
             served_by_model=served_by_model,
             served_by_tier=served_by_tier,
             confidence=tier1_conf,
