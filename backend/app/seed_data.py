@@ -6,6 +6,7 @@ from app.models.db_models import LLMModel, ModelPricing
 
 
 SEED_MODELS = [
+    # ── Anthropic ──────────────────────────────────────────────────────────
     {
         "provider_name": "anthropic",
         "model_name": "claude-3-5-haiku-20241022",
@@ -38,6 +39,40 @@ SEED_MODELS = [
         "output_price_per_million": 15.00,
         "cached_input_price_per_million": 0.30,
     },
+
+    # ── Gemini ─────────────────────────────────────────────────────────────
+    {
+        "provider_name": "gemini",
+        "model_name": "models/gemini-flash-lite-latest",
+        "display_name": "Gemini Flash Lite",
+        "tier": "tier1",
+        "context_window": 1000000,
+        "supports_tools": False,
+        "supports_json": True,
+        "supports_streaming": True,
+        "supports_prompt_cache": False,
+        "base_quality_score": 0.75,
+        "expected_latency_ms": 180,
+        "input_price_per_million": 0.0375,
+        "output_price_per_million": 0.15,
+        "cached_input_price_per_million": 0.0,
+    },
+    {
+        "provider_name": "gemini",
+        "model_name": "models/gemma-4-26b-a4b-it",
+        "display_name": "Gemma 4 26B",
+        "tier": "tier1",
+        "context_window": 128000,
+        "supports_tools": False,
+        "supports_json": True,
+        "supports_streaming": True,
+        "supports_prompt_cache": False,
+        "base_quality_score": 0.80,
+        "expected_latency_ms": 250,
+        "input_price_per_million": 0.05,
+        "output_price_per_million": 0.20,
+        "cached_input_price_per_million": 0.0,
+    },
     {
         "provider_name": "gemini",
         "model_name": "models/gemini-2.5-flash",
@@ -56,6 +91,22 @@ SEED_MODELS = [
     },
     {
         "provider_name": "gemini",
+        "model_name": "models/gemini-flash-latest",
+        "display_name": "Gemini Flash (Deep)",
+        "tier": "tier2",
+        "context_window": 1000000,
+        "supports_tools": True,
+        "supports_json": True,
+        "supports_streaming": True,
+        "supports_prompt_cache": False,
+        "base_quality_score": 0.87,
+        "expected_latency_ms": 600,
+        "input_price_per_million": 0.05,
+        "output_price_per_million": 0.20,
+        "cached_input_price_per_million": 0.0,
+    },
+    {
+        "provider_name": "gemini",
         "model_name": "models/gemini-2.5-flash",
         "display_name": "Gemini 2.5 Flash (Deep Synthesis)",
         "tier": "tier2",
@@ -70,6 +121,8 @@ SEED_MODELS = [
         "output_price_per_million": 0.30,
         "cached_input_price_per_million": 0.0,
     },
+
+    # ── Groq ───────────────────────────────────────────────────────────────
     {
         "provider_name": "groq",
         "model_name": "llama-3.1-8b-instant",
@@ -88,6 +141,70 @@ SEED_MODELS = [
     },
     {
         "provider_name": "groq",
+        "model_name": "qwen/qwen3.8-27b",
+        "display_name": "Qwen 3.8 27B",
+        "tier": "tier1",
+        "context_window": 128000,
+        "supports_tools": True,
+        "supports_json": True,
+        "supports_streaming": True,
+        "supports_prompt_cache": False,
+        "base_quality_score": 0.82,
+        "expected_latency_ms": 200,
+        "input_price_per_million": 0.08,
+        "output_price_per_million": 0.12,
+        "cached_input_price_per_million": 0.0,
+    },
+    {
+        "provider_name": "groq",
+        "model_name": "openai/gpt-oss-120b",
+        "display_name": "GPT-OSS 120B",
+        "tier": "tier1",
+        "context_window": 128000,
+        "supports_tools": True,
+        "supports_json": True,
+        "supports_streaming": True,
+        "supports_prompt_cache": False,
+        "base_quality_score": 0.86,
+        "expected_latency_ms": 350,
+        "input_price_per_million": 0.15,
+        "output_price_per_million": 0.25,
+        "cached_input_price_per_million": 0.0,
+    },
+    {
+        "provider_name": "groq",
+        "model_name": "openai/gpt-oss-120b",
+        "display_name": "GPT-OSS 120B (Frontier)",
+        "tier": "tier2",
+        "context_window": 128000,
+        "supports_tools": True,
+        "supports_json": True,
+        "supports_streaming": True,
+        "supports_prompt_cache": False,
+        "base_quality_score": 0.86,
+        "expected_latency_ms": 350,
+        "input_price_per_million": 0.15,
+        "output_price_per_million": 0.25,
+        "cached_input_price_per_million": 0.0,
+    },
+    {
+        "provider_name": "groq",
+        "model_name": "qwen/qwen3.8-27b",
+        "display_name": "Qwen 3.8 27B (Frontier)",
+        "tier": "tier2",
+        "context_window": 128000,
+        "supports_tools": True,
+        "supports_json": True,
+        "supports_streaming": True,
+        "supports_prompt_cache": False,
+        "base_quality_score": 0.82,
+        "expected_latency_ms": 200,
+        "input_price_per_million": 0.08,
+        "output_price_per_million": 0.12,
+        "cached_input_price_per_million": 0.0,
+    },
+    {
+        "provider_name": "groq",
         "model_name": "llama-3.3-70b-versatile",
         "display_name": "Llama 3.3 70B Versatile",
         "tier": "tier2",
@@ -102,6 +219,8 @@ SEED_MODELS = [
         "output_price_per_million": 0.79,
         "cached_input_price_per_million": 0.0,
     },
+
+    # ── Mistral ────────────────────────────────────────────────────────────
     {
         "provider_name": "mistral",
         "model_name": "mistral-small-latest",
@@ -134,6 +253,8 @@ SEED_MODELS = [
         "output_price_per_million": 6.00,
         "cached_input_price_per_million": 0.0,
     },
+
+    # ── OpenAI ─────────────────────────────────────────────────────────────
     {
         "provider_name": "openai",
         "model_name": "gpt-4o-mini",
@@ -166,6 +287,8 @@ SEED_MODELS = [
         "output_price_per_million": 10.00,
         "cached_input_price_per_million": 1.25,
     },
+
+    # ── Mock ───────────────────────────────────────────────────────────────
     {
         "provider_name": "mock",
         "model_name": "claude-3-5-haiku-20241022",

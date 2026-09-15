@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Cpu, DollarSign, HelpCircle, Layers, ShieldCheck, Sparkles, Activity } from "lucide-react";
+import { PanelLeft, Sparkles, Activity, Layers, HelpCircle } from "lucide-react";
 
 interface NavbarProps {
   provider: string;
@@ -9,6 +9,9 @@ interface NavbarProps {
   onOpenGuide: () => void;
   activeTab: "playground" | "analytics" | "history";
   setActiveTab: (tab: "playground" | "analytics" | "history") => void;
+  sidebarOpen: boolean;
+  setSidebarOpen: (open: boolean) => void;
+  onNewChat: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -16,86 +19,91 @@ export const Navbar: React.FC<NavbarProps> = ({
   setProvider,
   onOpenGuide,
   activeTab,
-  setActiveTab
+  setActiveTab,
+  sidebarOpen,
+  setSidebarOpen,
+  onNewChat,
 }) => {
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-xl">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-        {/* Brand Logo */}
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 via-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20 text-white font-black text-xl">
+    <header className="flex items-center justify-between h-14 px-4 bg-[#212121] border-b border-neutral-700 shrink-0">
+      {/* Left: Sidebar toggle + Brand */}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          className="p-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition"
+        >
+          <PanelLeft className="w-5 h-5" />
+        </button>
+
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-blue-600 to-cyan-500 flex items-center justify-center text-white text-xs font-bold">
             ⚡
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-extrabold text-lg text-white tracking-tight">CostAware</span>
-              <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded-full bg-gradient-to-r from-blue-500/20 to-cyan-500/20 border border-blue-400/30 text-cyan-300">
-                Cascading Router
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-400 font-medium">Multi-Tier Confidence Gate & Spend Audit</p>
-          </div>
+          <span className="font-semibold text-sm text-white hidden sm:block">
+            CostAware
+          </span>
         </div>
+      </div>
 
-        {/* Tab Navigation */}
-        <div className="hidden md:flex items-center gap-1 bg-slate-900/90 p-1 rounded-xl border border-slate-800">
-          <button
-            onClick={() => setActiveTab("playground")}
-            className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
-              activeTab === "playground"
-                ? "bg-blue-600 text-white shadow-md shadow-blue-600/30"
-                : "text-slate-400 hover:text-slate-200"
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5" /> Pipeline Playground
-          </button>
-          <button
-            onClick={() => setActiveTab("analytics")}
-            className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
-              activeTab === "analytics"
-                ? "bg-blue-600 text-white shadow-md shadow-blue-600/30"
-                : "text-slate-400 hover:text-slate-200"
-            }`}
-          >
-            <Activity className="w-3.5 h-3.5" /> ROI Analytics
-          </button>
-          <button
-            onClick={() => setActiveTab("history")}
-            className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
-              activeTab === "history"
-                ? "bg-blue-600 text-white shadow-md shadow-blue-600/30"
-                : "text-slate-400 hover:text-slate-200"
-            }`}
-          >
-            <Layers className="w-3.5 h-3.5" /> Audit Ledger
-          </button>
-        </div>
+      {/* Center: Tab Navigation */}
+      <nav className="flex items-center gap-1 bg-[#2f2f2f] p-1 rounded-lg">
+        <button
+          onClick={() => setActiveTab("playground")}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition ${
+            activeTab === "playground"
+              ? "bg-neutral-700 text-white"
+              : "text-neutral-400 hover:text-neutral-200"
+          }`}
+        >
+          <Sparkles className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">Playground</span>
+        </button>
+        <button
+          onClick={() => setActiveTab("analytics")}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition ${
+            activeTab === "analytics"
+              ? "bg-neutral-700 text-white"
+              : "text-neutral-400 hover:text-neutral-200"
+          }`}
+        >
+          <Activity className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">Analytics</span>
+        </button>
+        <button
+          onClick={() => setActiveTab("history")}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition ${
+            activeTab === "history"
+              ? "bg-neutral-700 text-white"
+              : "text-neutral-400 hover:text-neutral-200"
+          }`}
+        >
+          <Layers className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">Audit Ledger</span>
+        </button>
+      </nav>
 
-        {/* Provider Switcher & Free Key Guide */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-slate-900/90 px-3 py-1.5 rounded-xl border border-slate-800 text-xs">
-            <span className="text-slate-400 font-medium">Provider:</span>
-            <select
-              value={provider}
-              onChange={(e) => setProvider(e.target.value)}
-              className="bg-transparent text-white font-semibold outline-none cursor-pointer text-xs"
-            >
-              <option value="mock" className="bg-slate-900 text-white">Simulation (Haiku ➔ Sonnet)</option>
-              <option value="gemini" className="bg-slate-900 text-white">Gemini (Flash ➔ Pro) [Free Tier]</option>
-              <option value="groq" className="bg-slate-900 text-white">Groq (8B ➔ 70B) [Free Tier]</option>
-              <option value="mistral" className="bg-slate-900 text-white">Mistral (Small ➔ Large)</option>
-              <option value="anthropic" className="bg-slate-900 text-white">Anthropic (Haiku ➔ Sonnet)</option>
-              <option value="openai" className="bg-slate-900 text-white">OpenAI (Mini ➔ 4o)</option>
-            </select>
-          </div>
-
-          <button
-            onClick={onOpenGuide}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 text-xs font-medium text-slate-300 hover:text-white transition"
-          >
-            <HelpCircle className="w-3.5 h-3.5 text-cyan-400" /> Free Tier Keys?
-          </button>
-        </div>
+      {/* Right: Provider + Guide */}
+      <div className="flex items-center gap-2">
+        <select
+          value={provider}
+          onChange={(e) => setProvider(e.target.value)}
+          className="bg-[#2f2f2f] border border-neutral-600 text-neutral-200 rounded-lg px-2.5 py-1.5 text-xs outline-none cursor-pointer hidden sm:block font-medium"
+        >
+          <option value="gemini">✨ Gemini (Live)</option>
+          <option value="groq">⚡ Groq (Live)</option>
+          <option value="auto">🎯 Auto (Pareto Optimal)</option>
+          <option value="openai">OpenAI</option>
+          <option value="anthropic">Anthropic</option>
+          <option value="mistral">Mistral</option>
+          <option value="mock">Simulation (Offline)</option>
+        </select>
+        <button
+          onClick={onOpenGuide}
+          className="p-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition"
+          title="Free Tier Keys Guide"
+        >
+          <HelpCircle className="w-4 h-4" />
+        </button>
       </div>
     </header>
   );

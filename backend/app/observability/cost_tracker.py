@@ -7,6 +7,30 @@ class CostTracker:
     _db_cache: Dict[str, Tuple[str, float, float]] = {}
 
     @staticmethod
+    async def _get_db_pricing_by_model_id(model_id: str) -> Optional[Tuple[str, float, float]]:
+        try:
+            from sqlalchemy import select
+            from app.database import async_session
+            from app.models.db_models import ModelPricing as DBModelPricing
+
+            async with async_session() as session:
+                stmt = (
+                    select(DBModelPricing)
+                    .where(
+                        DBModelPricing.model_id == model_id,
+                        DBModelPricing.effective_to.is_(None),
+                    )
+                    .limit(1)
+                )
+                result = await session.execute(stmt)
+                pricing = result.scalars().first()
+                if pricing:
+                    return (pricing.id, pricing.input_price_per_million, pricing.output_price_per_million)
+        except Exception:
+            pass
+        return None
+
+    @staticmethod
     async def _get_db_pricing(provider: str, tier: str) -> Optional[Tuple[str, float, float]]:
         try:
             from sqlalchemy import select
@@ -35,8 +59,16 @@ class CostTracker:
         return None
 
     @staticmethod
-    async def calculate_model_cost(provider: str, tier: str, input_tokens: int, output_tokens: int) -> Tuple[float, Optional[str]]:
-        db_pricing = await CostTracker._get_db_pricing(provider, tier)
+    async def calculate_model_cost(
+        provider: str, tier: str, input_tokens: int, output_tokens: int,
+        model_id: Optional[str] = None,
+    ) -> Tuple[float, Optional[str]]:
+        db_pricing = None
+        if model_id:
+            db_pricing = await CostTracker._get_db_pricing_by_model_id(model_id)
+        if not db_pricing:
+            db_pricing = await CostTracker._get_db_pricing(provider, tier)
+
         if db_pricing:
             pricing_id, input_cost_per_m, output_cost_per_m = db_pricing
         else:
@@ -56,16 +88,20 @@ class CostTracker:
         tier1_tokens: TokenMetrics,
         tier2_tokens: TokenMetrics,
         escalation: EscalationEvent,
+        tier1_model_id: Optional[str] = None,
+        tier2_model_id: Optional[str] = None,
     ) -> CostBreakdown:
         tier1_cost, tier1_pricing_id = await CostTracker.calculate_model_cost(
-            provider, "tier1", tier1_tokens.input_tokens, tier1_tokens.output_tokens
+            provider, "tier1", tier1_tokens.input_tokens, tier1_tokens.output_tokens,
+            model_id=tier1_model_id,
         )
 
         tier2_cost = 0.0
         tier2_pricing_id = None
         if escalation.escalated:
             tier2_cost, tier2_pricing_id = await CostTracker.calculate_model_cost(
-                provider, "tier2", tier2_tokens.input_tokens, tier2_tokens.output_tokens
+                provider, "tier2", tier2_tokens.input_tokens, tier2_tokens.output_tokens,
+                model_id=tier2_model_id,
             )
 
         total_cost = round(tier1_cost + tier2_cost, 6)

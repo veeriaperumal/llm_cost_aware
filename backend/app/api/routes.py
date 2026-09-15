@@ -44,18 +44,21 @@ async def get_analytics():
 
 @router.get("/models", response_model=List[ModelInfo], summary="Get All Registered LLM Models")
 async def get_models():
-    """Returns all registered models with their active pricing from the database."""
+    """Returns all registered models with their active pricing and Pareto scores from the database."""
     try:
         from sqlalchemy import select
         from app.database import async_session
         from app.models.db_models import LLMModel, ModelPricing as DBModelPricing
+        from app.graph.pareto import ModelCandidate, get_pareto_scores
 
         async with async_session() as session:
             stmt = select(LLMModel).where(LLMModel.active == True).order_by(LLMModel.provider_name, LLMModel.tier)
             result = await session.execute(stmt)
             models = result.scalars().all()
 
-            model_list = []
+            # Build candidates per tier for Pareto scoring
+            tier_candidates = {"tier1": [], "tier2": []}
+            model_pricing_map = {}
             for m in models:
                 pricing_stmt = (
                     select(DBModelPricing)
@@ -67,6 +70,29 @@ async def get_models():
                 )
                 pricing_result = await session.execute(pricing_stmt)
                 pricing = pricing_result.scalars().first()
+                model_pricing_map[m.id] = pricing
+
+                if pricing:
+                    cost = pricing.input_price_per_million * 0.75 + pricing.output_price_per_million * 0.25
+                    tier_candidates[m.tier].append(ModelCandidate(
+                        model_id=m.id,
+                        provider_name=m.provider_name,
+                        model_name=m.model_name,
+                        display_name=m.display_name,
+                        quality=m.base_quality_score,
+                        latency_ms=m.expected_latency_ms,
+                        cost_per_million=cost,
+                    ))
+
+            # Compute Pareto scores per tier
+            pareto_scores = {}
+            for tier, candidates in tier_candidates.items():
+                for model_id, score, rank in get_pareto_scores(candidates):
+                    pareto_scores[model_id] = (score, rank)
+
+            model_list = []
+            for m in models:
+                pricing = model_pricing_map.get(m.id)
 
                 active_pricing = None
                 if pricing:
@@ -79,6 +105,8 @@ async def get_models():
                         effective_from=pricing.effective_from.isoformat(),
                         effective_to=pricing.effective_to.isoformat() if pricing.effective_to else None,
                     )
+
+                pareto_score, pareto_rank = pareto_scores.get(m.id, (None, None))
 
                 model_list.append(ModelInfo(
                     id=m.id,
@@ -95,6 +123,8 @@ async def get_models():
                     base_quality_score=m.base_quality_score,
                     expected_latency_ms=m.expected_latency_ms,
                     active_pricing=active_pricing,
+                    pareto_score=pareto_score,
+                    pareto_rank=pareto_rank,
                 ))
 
             return model_list
