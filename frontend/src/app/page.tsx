@@ -16,7 +16,7 @@ import {
   Plus,
   AlertCircle,
   PanelLeftClose,
-  PanelLeft,
+  PanelRight,
   Settings2,
 } from "lucide-react";
 
@@ -69,6 +69,7 @@ export default function Home() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
+  const [rightPanelOpen, setRightPanelOpen] = useState<boolean>(false);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -106,13 +107,6 @@ export default function Home() {
       if (historyRes.ok) setHistory(await historyRes.json());
       const analyticsRes = await fetch("/api/analytics");
       if (analyticsRes.ok) setAnalytics(await analyticsRes.json());
-      const providersRes = await fetch("/api/providers");
-      if (providersRes.ok) {
-        const pData = await providersRes.json();
-        if (pData.default_provider && pData.default_provider !== "mock") {
-          setProvider((curr) => (curr === "mock" ? pData.default_provider : curr));
-        }
-      }
     } catch {
       console.log("Backend offline or local simulation active");
     }
@@ -171,6 +165,7 @@ export default function Home() {
       };
       setMessages((prev) => [...prev, assistantMsg]);
       streamText(data.final_answer, assistantId);
+      setRightPanelOpen(true);
       fetchAuditData();
     } catch (err: unknown) {
       console.error("Chat API error:", err);
@@ -213,7 +208,12 @@ export default function Home() {
     setDisplayedAnswer("");
     setErrorMsg(null);
     setActiveTab("playground");
+    setRightPanelOpen(false);
   };
+
+  const lastAssistantResponse =
+    [...messages].reverse().find((m) => m.role === "assistant" && m.response)
+      ?.response || null;
 
   return (
     <div className="h-screen flex flex-col bg-[#212121]">
@@ -239,7 +239,7 @@ export default function Home() {
 
       {/* Main Content Area */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar */}
+        {/* Left Sidebar */}
         <aside
           className={`${
             sidebarOpen ? "translate-x-0" : "-translate-x-full"
@@ -292,7 +292,7 @@ export default function Home() {
           </div>
         </aside>
 
-        {/* Sidebar overlay for mobile */}
+        {/* Sidebar overlay */}
         {sidebarOpen && (
           <div
             className="fixed inset-0 bg-black/50 z-20 md:hidden"
@@ -300,11 +300,11 @@ export default function Home() {
           />
         )}
 
-        {/* Main Chat Area */}
+        {/* Center: Chat Area */}
         <main className="flex-1 flex flex-col min-w-0">
           {activeTab === "playground" ? (
             <>
-              {/* Settings Panel (collapsible) */}
+              {/* Settings Panel */}
               {settingsOpen && (
                 <div className="border-b border-neutral-700 bg-[#1a1a1a] px-4 py-3">
                   <div className="max-w-3xl mx-auto grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
@@ -393,7 +393,6 @@ export default function Home() {
                       is low.
                     </p>
 
-                    {/* Preset suggestions */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl w-full">
                       {PRESETS.map((preset, idx) => (
                         <button
@@ -437,7 +436,7 @@ export default function Home() {
                               <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center shrink-0 mt-1">
                                 <Bot className="w-4 h-4 text-white" />
                               </div>
-                              <div className="flex-1 min-w-0 space-y-4">
+                              <div className="flex-1 min-w-0 space-y-3">
                                 {/* Model label */}
                                 {msg.response && (
                                   <div className="flex items-center gap-2 text-xs text-neutral-400">
@@ -456,6 +455,37 @@ export default function Home() {
                                         </span>
                                       </>
                                     )}
+                                    {msg.response.quality_recovery &&
+                                      msg.response.quality_recovery
+                                        .action_taken !== "accept" && (
+                                        <>
+                                          <span>&middot;</span>
+                                          <span
+                                            className={`uppercase text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                                              msg.response.quality_recovery
+                                                .action_taken ===
+                                              "revise_success"
+                                                ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                                                : msg.response.quality_recovery
+                                                    .action_taken === "escalate"
+                                                ? "bg-orange-500/20 text-orange-300 border-orange-500/30"
+                                                : "bg-neutral-500/20 text-neutral-300 border-neutral-500/30"
+                                            }`}
+                                          >
+                                            {msg.response.quality_recovery
+                                              .action_taken === "revise_success"
+                                              ? "Revised"
+                                              : msg.response.quality_recovery
+                                                  .action_taken === "escalate"
+                                              ? "Quality Escalated"
+                                              : msg.response.quality_recovery
+                                                  .action_taken ===
+                                                "tier2_best_available"
+                                              ? "Best Available"
+                                              : "Recovery Applied"}
+                                          </span>
+                                        </>
+                                      )}
                                   </div>
                                 )}
 
@@ -483,18 +513,15 @@ export default function Home() {
                                       )}
                                       {isCopied ? "Copied" : "Copy"}
                                     </button>
-                                  </div>
-                                )}
-
-                                {/* Cascade flow + Cost audit (collapsible details) */}
-                                {msg.response && streamingMessageId !== msg.id && (
-                                  <div className="mt-4 space-y-4">
-                                    <CascadeFlow
-                                      response={msg.response}
-                                      isLoading={false}
-                                      threshold={threshold}
-                                    />
-                                    <CostAuditCard response={msg.response} />
+                                    {msg.response && (
+                                      <button
+                                        onClick={() => setRightPanelOpen(true)}
+                                        className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800 transition"
+                                      >
+                                        <PanelRight className="w-3.5 h-3.5" />
+                                        Details
+                                      </button>
+                                    )}
                                   </div>
                                 )}
 
@@ -515,7 +542,7 @@ export default function Home() {
                       </div>
                     ))}
 
-                    {/* Show loading message if waiting for response */}
+                    {/* Loading message */}
                     {isLoading &&
                       !streamingMessageId &&
                       messages[messages.length - 1]?.role === "user" && (
@@ -600,6 +627,75 @@ export default function Home() {
             </div>
           )}
         </main>
+
+        {/* Right Panel: Cascade Flow + Cost Audit */}
+        {activeTab === "playground" && (
+          <>
+            {/* Desktop right panel */}
+            <aside
+              className={`${
+                rightPanelOpen && lastAssistantResponse
+                  ? "w-[420px] border-l"
+                  : "w-0 border-l-0"
+              } hidden lg:block bg-[#171717] border-neutral-700 transition-all duration-300 overflow-hidden shrink-0`}
+            >
+              {rightPanelOpen && lastAssistantResponse && (
+                <div className="w-[420px] h-full flex flex-col">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-700 shrink-0">
+                    <span className="text-xs font-semibold text-neutral-200">
+                      Pipeline Details
+                    </span>
+                    <button
+                      onClick={() => setRightPanelOpen(false)}
+                      className="p-1 rounded text-neutral-500 hover:text-white hover:bg-neutral-800 transition"
+                    >
+                      <PanelRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                    <CascadeFlow
+                      response={lastAssistantResponse}
+                      isLoading={isLoading}
+                      threshold={threshold}
+                    />
+                    <CostAuditCard response={lastAssistantResponse} />
+                  </div>
+                </div>
+              )}
+            </aside>
+
+            {/* Mobile right panel (overlay) */}
+            {rightPanelOpen && lastAssistantResponse && (
+              <div className="lg:hidden fixed inset-0 z-40 flex">
+                <div
+                  className="absolute inset-0 bg-black/60"
+                  onClick={() => setRightPanelOpen(false)}
+                />
+                <div className="absolute right-0 top-0 bottom-0 w-full max-w-md bg-[#171717] border-l border-neutral-700 flex flex-col shadow-2xl">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-700 shrink-0">
+                    <span className="text-xs font-semibold text-neutral-200">
+                      Pipeline Details
+                    </span>
+                    <button
+                      onClick={() => setRightPanelOpen(false)}
+                      className="p-1 rounded text-neutral-500 hover:text-white hover:bg-neutral-800 transition"
+                    >
+                      <PanelRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                    <CascadeFlow
+                      response={lastAssistantResponse}
+                      isLoading={isLoading}
+                      threshold={threshold}
+                    />
+                    <CostAuditCard response={lastAssistantResponse} />
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   );

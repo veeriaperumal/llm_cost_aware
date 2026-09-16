@@ -83,17 +83,14 @@ class Settings(BaseModel):
             or ""
         ).strip()
         if not raw_url:
-            data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
-            os.makedirs(data_dir, exist_ok=True)
-            db_path = os.path.join(data_dir, "cost_aware.db").replace("\\", "/")
-            return f"sqlite+aiosqlite:///{db_path}"
+            raise RuntimeError(
+                "DATABASE_URL is not set. Please configure it in .env for PostgreSQL."
+            )
         # Normalize postgres protocol for async SQLAlchemy
         if raw_url.startswith("postgres://"):
             raw_url = "postgresql+asyncpg://" + raw_url[len("postgres://"):]
         elif raw_url.startswith("postgresql://") and not raw_url.startswith("postgresql+"):
             raw_url = "postgresql+asyncpg://" + raw_url[len("postgresql://"):]
-        elif raw_url.startswith("sqlite://") and not raw_url.startswith("sqlite+"):
-            raw_url = "sqlite+aiosqlite://" + raw_url[len("sqlite://"):]
         return raw_url
 
     @property
@@ -134,6 +131,40 @@ class Settings(BaseModel):
     def quality_evaluation_enabled(self) -> bool:
         load_dotenv(override=True)
         return os.getenv("QUALITY_EVALUATION_ENABLED", "true").strip().lower() in ("true", "1", "yes")
+
+    @property
+    def quality_recovery_enabled(self) -> bool:
+        load_dotenv(override=True)
+        return os.getenv("QUALITY_RECOVERY_ENABLED", "true").strip().lower() in ("true", "1", "yes")
+
+    @property
+    def quality_accept_threshold(self) -> float:
+        load_dotenv(override=True)
+        try:
+            return float(os.getenv("QUALITY_ACCEPT_THRESHOLD", "0.90"))
+        except Exception:
+            return 0.90
+
+    @property
+    def quality_revise_threshold(self) -> float:
+        load_dotenv(override=True)
+        try:
+            return float(os.getenv("QUALITY_REVISE_THRESHOLD", "0.80"))
+        except Exception:
+            return 0.80
+
+    @property
+    def quality_revision_model(self) -> str:
+        load_dotenv(override=True)
+        return os.getenv("QUALITY_REVISION_MODEL", "").strip()
+
+    @property
+    def quality_max_revisions(self) -> int:
+        load_dotenv(override=True)
+        try:
+            return int(os.getenv("QUALITY_MAX_REVISIONS", "1"))
+        except Exception:
+            return 1
 
     # Pricing catalog in USD per 1 Million Tokens (fallback if DB unavailable)
     pricing_catalog: Dict[str, Dict[str, ModelPricing]] = {

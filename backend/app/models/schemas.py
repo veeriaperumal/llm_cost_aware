@@ -60,6 +60,7 @@ class ChatResponse(BaseModel):
     cost_breakdown: CostBreakdown
     total_latency_ms: float
     quality_evaluation: Optional[QualityEvaluationResult] = None
+    quality_recovery: Optional[QualityRecoveryResult] = None
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class QueryHistoryItem(BaseModel):
@@ -141,3 +142,14 @@ class QualityHistoryItem(BaseModel):
     llm_judge_score: Optional[float] = None
     metrics_json: str = "{}"
     evaluated_at: str
+
+
+class QualityRecoveryResult(BaseModel):
+    action_taken: str
+    original_score: float
+    final_score: Optional[float] = None
+    revision_attempts: int = 0
+    recovery_model: Optional[str] = None
+    recovery_model_id: Optional[str] = None
+    recovery_cost_usd: float = 0.0
+    recovery_latency_ms: float = 0.0

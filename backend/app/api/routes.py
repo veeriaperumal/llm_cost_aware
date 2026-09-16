@@ -250,3 +250,51 @@ async def get_quality_evaluations(
             return {"evaluations": items, "count": len(items)}
     except Exception:
         return {"evaluations": [], "count": 0}
+
+
+@router.get("/quality/recovery", summary="Get Quality Recovery History")
+async def get_quality_recovery(
+    model_id: Optional[str] = None,
+    action_taken: Optional[str] = None,
+    limit: int = 50,
+):
+    """Returns quality recovery records from model_quality_recoveries table."""
+    try:
+        from sqlalchemy import select
+        from app.database import async_session
+        from app.models.db_models import ModelQualityRecovery, LLMModel
+
+        async with async_session() as session:
+            stmt = select(ModelQualityRecovery).order_by(ModelQualityRecovery.created_at.desc()).limit(limit)
+            if model_id:
+                stmt = stmt.where(ModelQualityRecovery.model_id == model_id)
+            if action_taken:
+                stmt = stmt.where(ModelQualityRecovery.action_taken == action_taken)
+            result = await session.execute(stmt)
+            recoveries = result.scalars().all()
+
+            items = []
+            for r in recoveries:
+                model_stmt = select(LLMModel).where(LLMModel.id == r.model_id)
+                model_result = await session.execute(model_stmt)
+                model = model_result.scalars().first()
+                items.append({
+                    "id": r.id,
+                    "model_id": r.model_id,
+                    "model_name": model.display_name if model else "Unknown",
+                    "provider_name": model.provider_name if model else "Unknown",
+                    "query_id": r.query_id,
+                    "original_quality_score": r.original_quality_score,
+                    "final_quality_score": r.final_quality_score,
+                    "action_taken": r.action_taken,
+                    "revision_attempts": r.revision_attempts,
+                    "recovery_model": r.recovery_model,
+                    "recovery_model_id": r.recovery_model_id,
+                    "recovery_cost_usd": r.recovery_cost_usd,
+                    "recovery_latency_ms": r.recovery_latency_ms,
+                    "created_at": r.created_at.isoformat() if r.created_at else "",
+                })
+
+            return {"recoveries": items, "count": len(items)}
+    except Exception:
+        return {"recoveries": [], "count": 0}

@@ -35,6 +35,25 @@ export interface CostBreakdown {
   spend_justification: string;
 }
 
+export interface QualityEvaluationResult {
+  task_type: string;
+  quality_score: number;
+  deterministic_score?: number;
+  llm_judge_score?: number;
+  metrics: Record<string, number>;
+}
+
+export interface QualityRecoveryResult {
+  action_taken: string;
+  original_score: number;
+  final_score?: number;
+  revision_attempts: number;
+  recovery_model?: string;
+  recovery_model_id?: string;
+  recovery_cost_usd: number;
+  recovery_latency_ms: number;
+}
+
 export interface ChatResponse {
   id: string;
   prompt: string;
@@ -46,6 +65,8 @@ export interface ChatResponse {
   traces: ModelExecutionTrace[];
   cost_breakdown: CostBreakdown;
   total_latency_ms: number;
+  quality_evaluation?: QualityEvaluationResult;
+  quality_recovery?: QualityRecoveryResult;
   timestamp: string;
 }
 
