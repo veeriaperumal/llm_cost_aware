@@ -16,10 +16,54 @@ export interface ModelExecutionTrace {
   latency_ms: number;
 }
 
+export type EscalationReason =
+  | "LOW_CONFIDENCE"
+  | "LOW_QUALITY"
+  | "TOOL_FAILURE"
+  | "MODEL_TIMEOUT"
+  | "MODEL_RATE_LIMIT"
+  | "PROVIDER_ERROR"
+  | "BUDGET_POLICY"
+  | "CONTEXT_LIMIT"
+  | "STRUCTURED_OUTPUT_FAILURE"
+  | "PROMPT_INJECTION_RISK"
+  | "QUALITY_REVISION_FAILED"
+  | "FORCED_OVERRIDE";
+
+export const ESCALATION_LABELS: Record<EscalationReason, string> = {
+  LOW_CONFIDENCE: "Low Confidence",
+  LOW_QUALITY: "Low Quality Score",
+  TOOL_FAILURE: "Tool Execution Failure",
+  MODEL_TIMEOUT: "Model Timeout",
+  MODEL_RATE_LIMIT: "Model Rate Limit",
+  PROVIDER_ERROR: "Provider Error",
+  BUDGET_POLICY: "Budget Policy Override",
+  CONTEXT_LIMIT: "Context Window Exceeded",
+  STRUCTURED_OUTPUT_FAILURE: "Structured Output Failure",
+  PROMPT_INJECTION_RISK: "Prompt Injection Risk",
+  QUALITY_REVISION_FAILED: "Quality Revision Failed",
+  FORCED_OVERRIDE: "Forced Tier 2 Override",
+};
+
+export const ESCALATION_COLORS: Record<EscalationReason, string> = {
+  LOW_CONFIDENCE: "bg-amber-500/20 text-amber-300 border-amber-500/30",
+  LOW_QUALITY: "bg-amber-500/20 text-amber-300 border-amber-500/30",
+  TOOL_FAILURE: "bg-red-500/20 text-red-300 border-red-500/30",
+  MODEL_TIMEOUT: "bg-red-500/20 text-red-300 border-red-500/30",
+  MODEL_RATE_LIMIT: "bg-red-500/20 text-red-300 border-red-500/30",
+  PROVIDER_ERROR: "bg-red-500/20 text-red-300 border-red-500/30",
+  BUDGET_POLICY: "bg-blue-500/20 text-blue-300 border-blue-500/30",
+  CONTEXT_LIMIT: "bg-blue-500/20 text-blue-300 border-blue-500/30",
+  STRUCTURED_OUTPUT_FAILURE: "bg-blue-500/20 text-blue-300 border-blue-500/30",
+  PROMPT_INJECTION_RISK: "bg-purple-500/20 text-purple-300 border-purple-500/30",
+  QUALITY_REVISION_FAILED: "bg-amber-500/20 text-amber-300 border-amber-500/30",
+  FORCED_OVERRIDE: "bg-neutral-500/20 text-neutral-300 border-neutral-500/30",
+};
+
 export interface EscalationEvent {
   escalated: boolean;
-  reason?: string;
-  explanation?: string;
+  reason?: EscalationReason | string | null;
+  explanation?: string | null;
   trigger_confidence?: number;
   threshold?: number;
 }

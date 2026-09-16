@@ -7,21 +7,22 @@ from app.api.routes import router as api_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    from app.database import init_db
+    from app.database import init_db, get_checkpointer
     await init_db()
+    await get_checkpointer()
     yield
 
 
 app = FastAPI(
     title="Cost-Aware Multi-Tier Cascading Router API",
     description="Intelligent LLM Router with Confidence Gates, Dynamic Escalation, and Cost Audit Ledger.",
-    version="1.0.0",
+    version="2.0.0",
     lifespan=lifespan,
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all for development & local Next.js frontend
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -29,14 +30,18 @@ app.add_middleware(
 
 app.include_router(api_router, prefix="/api")
 
+
 @app.get("/")
 async def root():
     return {
-        "service": "Cost-Aware Cascading LLM Router API",
+        "service": "Cost-Aware Multi-Tier Cascading Router API",
+        "version": "2.0.0",
+        "engine": "LangGraph",
         "status": "healthy",
         "docs_url": "/docs",
-        "api_prefix": "/api"
+        "api_prefix": "/api",
     }
+
 
 if __name__ == "__main__":
     import uvicorn

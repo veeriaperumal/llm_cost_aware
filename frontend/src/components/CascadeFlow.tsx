@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { ChatResponse } from "../types";
+import { ChatResponse, EscalationReason, ESCALATION_LABELS, ESCALATION_COLORS } from "../types";
 import {
   ArrowDown,
   AlertTriangle,
@@ -154,9 +154,17 @@ export const CascadeFlow: React.FC<CascadeFlowProps> = ({
                 <span className="text-[10px] font-bold text-amber-400 uppercase">
                   Escalate Gate
                 </span>
-                <span className="text-[10px] text-neutral-500 font-mono ml-auto">
-                  reason=&quot;{response.escalation.reason}&quot;
-                </span>
+                {response.escalation.reason && (
+                  <span
+                    className={`text-[10px] px-1.5 py-0.5 rounded border font-bold ${
+                      ESCALATION_COLORS[(response.escalation.reason as EscalationReason)] ||
+                      "bg-neutral-500/20 text-neutral-300 border-neutral-500/30"
+                    }`}
+                  >
+                    {ESCALATION_LABELS[(response.escalation.reason as EscalationReason)] ||
+                      response.escalation.reason}
+                  </span>
+                )}
               </div>
               <p className="text-[11px] text-neutral-400">
                 {response.escalation.explanation ||

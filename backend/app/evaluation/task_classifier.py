@@ -48,19 +48,19 @@ def classify_task(prompt: str) -> TaskType:
     }
 
     for kw in CLASSIFICATION_KEYWORDS:
-        if kw in lower:
+        if re.search(r"\b" + re.escape(kw) + r"\b", lower):
             scores[TaskType.CLASSIFICATION] += 1
 
     for kw in EXTRACTION_KEYWORDS:
-        if kw in lower:
+        if re.search(r"\b" + re.escape(kw) + r"\b", lower):
             scores[TaskType.EXTRACTION] += 1
 
     for kw in SUMMARIZATION_KEYWORDS:
-        if kw in lower:
+        if re.search(r"\b" + re.escape(kw) + r"\b", lower):
             scores[TaskType.SUMMARIZATION] += 1
 
     for kw in TOOL_CALLING_KEYWORDS:
-        if kw in lower:
+        if re.search(r"\b" + re.escape(kw) + r"\b", lower):
             scores[TaskType.TOOL_CALLING] += 1
 
     max_score = max(scores.values())
