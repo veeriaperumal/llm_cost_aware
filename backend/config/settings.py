@@ -100,25 +100,40 @@ class Settings(BaseModel):
     def pareto_quality_weight(self) -> float:
         load_dotenv(override=True)
         try:
-            return float(os.getenv("PARETO_QUALITY_WEIGHT", "0.4"))
+            return float(os.getenv("PARETO_QUALITY_WEIGHT", "0.45"))
         except Exception:
-            return 0.4
+            return 0.45
 
     @property
     def pareto_latency_weight(self) -> float:
         load_dotenv(override=True)
         try:
-            return float(os.getenv("PARETO_LATENCY_WEIGHT", "0.3"))
+            return float(os.getenv("PARETO_LATENCY_WEIGHT", "0.30"))
         except Exception:
-            return 0.3
+            return 0.30
 
     @property
     def pareto_cost_weight(self) -> float:
         load_dotenv(override=True)
         try:
-            return float(os.getenv("PARETO_COST_WEIGHT", "0.3"))
+            return float(os.getenv("PARETO_COST_WEIGHT", "0.25"))
         except Exception:
-            return 0.3
+            return 0.25
+
+    @property
+    def judge_model_provider(self) -> str:
+        load_dotenv(override=True)
+        return os.getenv("JUDGE_MODEL_PROVIDER", "anthropic").strip().lower()
+
+    @property
+    def judge_model_name(self) -> str:
+        load_dotenv(override=True)
+        return os.getenv("JUDGE_MODEL_NAME", "claude-3-5-haiku-20241022").strip()
+
+    @property
+    def quality_evaluation_enabled(self) -> bool:
+        load_dotenv(override=True)
+        return os.getenv("QUALITY_EVALUATION_ENABLED", "true").strip().lower() in ("true", "1", "yes")
 
     # Pricing catalog in USD per 1 Million Tokens (fallback if DB unavailable)
     pricing_catalog: Dict[str, Dict[str, ModelPricing]] = {

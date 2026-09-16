@@ -59,6 +59,7 @@ class ChatResponse(BaseModel):
     traces: List[ModelExecutionTrace]
     cost_breakdown: CostBreakdown
     total_latency_ms: float
+    quality_evaluation: Optional[QualityEvaluationResult] = None
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class QueryHistoryItem(BaseModel):
@@ -118,3 +119,25 @@ class ModelInfo(BaseModel):
     active_pricing: Optional[ModelPricingInfo] = None
     pareto_score: Optional[float] = None
     pareto_rank: Optional[int] = None
+
+
+class QualityEvaluationResult(BaseModel):
+    task_type: str
+    quality_score: float
+    deterministic_score: Optional[float] = None
+    llm_judge_score: Optional[float] = None
+    metrics: Dict[str, Any] = Field(default_factory=dict)
+
+
+class QualityHistoryItem(BaseModel):
+    id: str
+    model_id: str
+    model_name: str
+    provider_name: str
+    query_id: str
+    task_type: str
+    quality_score: float
+    deterministic_score: Optional[float] = None
+    llm_judge_score: Optional[float] = None
+    metrics_json: str = "{}"
+    evaluated_at: str

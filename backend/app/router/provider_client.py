@@ -187,6 +187,67 @@ class LLMProviderClient:
     # REAL PROVIDER INTEGRATIONS (Gemini, Groq, Mistral, Anthropic, OpenAI)
     # =========================================================================
     @staticmethod
+    def _parse_tier1_json_response(raw_text: str, default_conf: float = 0.85) -> Tuple[str, float, List[str]]:
+        clean_text = (raw_text or "").strip()
+        if clean_text.startswith("```"):
+            clean_text = re.sub(r"^```(?:json)?\s*", "", clean_text, flags=re.IGNORECASE)
+            clean_text = re.sub(r"\s*```$", "", clean_text)
+            clean_text = clean_text.strip()
+
+        # 1. Try standard and non-strict json parsing
+        for strict_mode in (True, False):
+            try:
+                parsed = json.loads(clean_text, strict=strict_mode)
+                if isinstance(parsed, dict):
+                    draft = str(parsed.get("answer", clean_text))
+                    conf_val = parsed.get("confidence")
+                    conf = float(conf_val) if conf_val is not None else default_conf
+                    reasons = parsed.get("uncertainty_reasons", [])
+                    if not isinstance(reasons, list):
+                        reasons = [str(reasons)] if reasons else []
+                    return draft, conf, reasons
+            except Exception:
+                pass
+
+        # 2. Try regex extraction of JSON {...}
+        match = re.search(r"\{[\s\S]*\}", clean_text)
+        if match:
+            for strict_mode in (False, True):
+                try:
+                    parsed = json.loads(match.group(0), strict=strict_mode)
+                    if isinstance(parsed, dict):
+                        draft = str(parsed.get("answer", clean_text))
+                        conf_val = parsed.get("confidence")
+                        conf = float(conf_val) if conf_val is not None else default_conf
+                        reasons = parsed.get("uncertainty_reasons", [])
+                        if not isinstance(reasons, list):
+                            reasons = [str(reasons)] if reasons else []
+                        return draft, conf, reasons
+                except Exception:
+                    pass
+
+        # 3. Fallback regex extraction of specific keys
+        conf_match = re.search(r'"confidence"\s*:\s*([0-1](?:\.\d+)?)', clean_text)
+        conf = float(conf_match.group(1)) if conf_match else default_conf
+
+        ans_match = re.search(r'"answer"\s*:\s*"([\s\S]*?)"\s*,\s*"confidence"', clean_text)
+        if ans_match:
+            try:
+                draft = json.loads(f'"{ans_match.group(1)}"', strict=False)
+            except Exception:
+                draft = ans_match.group(1)
+        else:
+            draft = clean_text
+
+        reasons = []
+        reasons_match = re.search(r'"uncertainty_reasons"\s*:\s*\[([\s\S]*?)\]', clean_text)
+        if reasons_match:
+            raw_items = re.findall(r'"([^"\\]*(?:\\.[^"\\]*)*)"', reasons_match.group(1))
+            reasons = raw_items
+
+        return draft, conf, reasons
+
+    @staticmethod
     async def _call_gemini_tier1(prompt: str) -> Tuple[str, float, List[str], int, int]:
         candidate_models = [
             "models/gemini-flash-lite-latest",
@@ -211,15 +272,7 @@ class LLMProviderClient:
                     if resp.status_code == 200:
                         data = resp.json()
                         raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
-                        try:
-                            parsed = json.loads(raw_text)
-                            draft = parsed.get("answer", raw_text)
-                            conf = float(parsed.get("confidence", 0.85))
-                            reasons = parsed.get("uncertainty_reasons", [])
-                        except Exception:
-                            draft = raw_text
-                            conf = 0.85
-                            reasons = []
+                        draft, conf, reasons = LLMProviderClient._parse_tier1_json_response(raw_text, default_conf=0.85)
                         usage = data.get("usageMetadata", {})
                         in_tok = usage.get("promptTokenCount", LLMProviderClient._estimate_tokens(prompt) + 50)
                         out_tok = usage.get("candidatesTokenCount", LLMProviderClient._estimate_tokens(draft))
@@ -292,15 +345,7 @@ class LLMProviderClient:
                     if resp.status_code == 200:
                         data = resp.json()
                         content = data["choices"][0]["message"]["content"]
-                        try:
-                            parsed = json.loads(content)
-                            draft = parsed.get("answer", content)
-                            conf = float(parsed.get("confidence", 0.70))
-                            reasons = parsed.get("uncertainty_reasons", [])
-                        except Exception:
-                            draft = content
-                            conf = 0.80
-                            reasons = []
+                        draft, conf, reasons = LLMProviderClient._parse_tier1_json_response(content, default_conf=0.70)
                         in_tok = data.get("usage", {}).get("prompt_tokens", LLMProviderClient._estimate_tokens(prompt) + 40)
                         out_tok = data.get("usage", {}).get("completion_tokens", LLMProviderClient._estimate_tokens(draft))
                         return draft, conf, reasons, in_tok, out_tok
