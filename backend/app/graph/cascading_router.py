@@ -27,13 +27,17 @@ class CascadingRouter:
 
     _graph = None
     _checkpointer = None
+    _loop = None
 
     @classmethod
     async def _get_graph(cls):
-        if cls._graph is None:
+        import asyncio
+        curr_loop = asyncio.get_running_loop()
+        if cls._graph is None or cls._loop is not curr_loop:
             from agent.graph import build_router_graph
             from app.database import get_checkpointer
 
+            cls._loop = curr_loop
             cls._checkpointer = await get_checkpointer()
             graph = build_router_graph()
             cls._graph = graph.compile(checkpointer=cls._checkpointer)
@@ -55,6 +59,7 @@ class CascadingRouter:
         initial_state = {
             "request_id": query_id,
             "tenant_id": "default",
+            "user_id": request.user_id,
             "user_input": request.prompt,
             "provider": provider,
             "confidence_threshold": threshold,
@@ -210,6 +215,7 @@ def _assemble_response(state: dict, total_latency_ms: float) -> ChatResponse:
         total_latency_ms=total_latency_ms,
         quality_evaluation=quality_eval,
         quality_recovery=quality_recovery,
+        key_source=state.get("key_source"),
         timestamp=datetime.now(timezone.utc),
     )
 

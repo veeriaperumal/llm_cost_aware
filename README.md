@@ -1,68 +1,87 @@
-# Cost-Aware Cascading LLM Router & Escalation System
+# Cost-Aware Multi-Tier Cascading LLM Router
 
-A production-grade, cost-aware LLM routing engine that optimizes AI inference budgets by implementing dynamic multi-tier confidence gates, automatic frontier escalation, and spend audit ledgers.
+A cost-aware LLM routing engine that optimizes AI inference budgets by cascading queries through fast, cheap models first — escalating to frontier models only when confidence is low or quality demands it. Built on LangGraph with PostgreSQL-backed state, Pareto-optimal model selection, hybrid quality evaluation, and a full cost audit ledger.
 
 ---
 
-## 🏗️ Architectural Workflow
-
-When a user submits a prompt, the query cascades through the following multi-tier evaluation pipeline:
+## Architecture
 
 ```
 User Prompt
     │
     ▼
-Tier 1: Fast & Cost-Efficient Model (e.g., Claude 3.5 Haiku / Gemini 1.5 Flash / Llama 3.1 8B)
-    │
-    ├── Evaluates response & structured self-confidence score (e.g. confidence = 0.61)
-    │
-    ▼
-Confidence Decision Gate (Threshold = 0.75)
-    │
-    ├── If confidence >= 0.75  ──►  Direct Return: Answer served at 1/10th the cost (100% Sonnet budget saved)
-    │
-    └── If confidence < 0.75   ──►  ESCALATE (reason = "low_confidence")
-                                        │
-                                        ▼
-                                    Tier 2: Frontier Intelligence Model (Claude 3.5 Sonnet / Gemini 1.5 Pro / Llama 3.3 70B)
-                                        │
-                                        ▼
-                                    Synthesizes Final Authoritative Answer
-                                        │
-                                        ▼
-                                    Audit Ledger records why we spent the extra money
+┌─────────────────────────┐
+│  classify_task          │  Analyze prompt complexity & task type
+└────────────┬────────────┘
+             ▼
+┌─────────────────────────┐
+│  select_models          │  Query DB, run Pareto filtering, pick best model
+└────────────┬────────────┘
+             ▼
+┌─────────────────────────┐
+│  execute_tier1          │  Call fast/cheap model, extract confidence score
+└────────────┬────────────┘
+             ▼
+┌─────────────────────────┐
+│  decide_escalation      │  Compare confidence vs threshold
+└─────┬──────────┬────────┘
+      │          │
+  [escalated]  [direct]
+      │          │
+      ▼          │
+┌─────────────┐  │
+│ execute_    │  │
+│ tier2       │  │
+└─────┬───────┘  │
+      │          │
+      └────┬─────┘
+           ▼
+┌─────────────────────────┐
+│  evaluate_quality       │  Hybrid scoring (deterministic + LLM judge)
+└────────────┬────────────┘
+             ▼
+┌─────────────────────────┐
+│  recover_quality        │  Auto-revise if quality too low; escalate if needed
+└────────────┬────────────┘
+             ▼
+┌─────────────────────────┐
+│  compute_costs          │  Full cost breakdown + spend justification
+└────────────┬────────────┘
+             ▼
+┌─────────────────────────┐
+│  finalize               │  Assemble response, persist audit history
+└─────────────────────────┘
 ```
 
 ---
 
-## 🔑 Free Tier API Keys vs Commercial API Keys Review
+## Core Features
 
-| Provider | Free Tier Available? | Recommended Models | Notes & Pricing Rate |
-| :--- | :--- | :--- | :--- |
-| **Google Gemini** | **YES (Free Tier)** | • Tier 1: `gemini-1.5-flash`<br>• Tier 2: `gemini-1.5-pro` | Free tier available on [Google AI Studio](https://aistudio.google.com/app/apikey). High rate limits (15 RPM) for zero-cost live testing. |
-| **Groq Cloud** | **YES (Free Tier)** | • Tier 1: `llama-3.1-8b-instant`<br>• Tier 2: `llama-3.3-70b-versatile` | Ultra-fast LPU inference available for free at [Groq Console](https://console.groq.com/keys). |
-| **Mistral AI** | **YES (Free Trial)** | • Tier 1: `mistral-small`<br>• Tier 2: `mistral-large` | Free experimentation credits on [La Plateforme](https://console.mistral.ai/). |
-| **Anthropic (Claude)** | **NO (Paid Only)** | • Tier 1: `claude-3-5-haiku`<br>• Tier 2: `claude-3-5-sonnet` | Requires minimum $5 prepaid balance on [Anthropic Console](https://console.anthropic.com/). Haiku: $0.80/$4.00 per 1M; Sonnet: $3.00/$15.00 per 1M. |
-| **OpenAI** | **NO (Paid Only)** | • Tier 1: `gpt-4o-mini`<br>• Tier 2: `gpt-4o` | Requires paid API credit tier on [OpenAI Platform](https://platform.openai.com/). Mini: $0.15/$0.60 per 1M; 4o: $2.50/$10.00 per 1M. |
-| **Simulated Mode** | **YES (Zero-Cost / Offline)** | • Tier 1: Haiku (Simulated)<br>• Tier 2: Sonnet (Simulated) | Default zero-config mode that accurately demonstrates Haiku (confidence = 0.61) ➔ ESCALATE (low_confidence) ➔ Sonnet. |
+- **Multi-tier cascading** — Queries hit cheap Tier 1 models first; escalate to expensive Tier 2 only when confidence falls below threshold
+- **Pareto-optimal model selection** — Filters dominated models on quality/latency/cost axes, ranks via weighted composite score (0.45 quality, 0.30 latency, 0.25 cost)
+- **Hybrid quality evaluation** — Deterministic scoring (format validity, token overlap, field matching) combined with LLM-as-judge (relevance, accuracy, faithfulness)
+- **Quality recovery** — Auto-revision when quality scores fall between 0.80-0.90; escalation to frontier model when below 0.80
+- **Cost audit ledger** — Every query records per-tier spend, savings vs Sonnet-only baseline, and human-readable spend justification
+- **6 LLM providers** — Gemini, Groq, Mistral, Anthropic, OpenAI, and Mock (simulated) with free-tier support
+- **Encrypted API key storage** — Per-user Fernet-encrypted keys stored in PostgreSQL
+- **12 escalation reasons** — Machine-readable reasons for every escalation (low confidence, low quality, timeout, rate limit, provider error, etc.)
 
 ---
 
-## 🚀 Quick Start & Production Setup
+## Quick Start
 
 ### Prerequisites
-- **Python 3.10+** (Tested on Python 3.14)
-- **Node.js 18+** & **npm** (Tested on Node v24)
 
----
+- **Python 3.10+**
+- **Node.js 18+** and **npm**
+- **PostgreSQL** (required — the app needs a running instance)
 
-### Step 1: Backend Setup (FastAPI)
+### 1. Backend
 
 ```bash
-# Navigate to backend folder
 cd backend
 
-# Create virtual environment (optional but recommended)
+# Create virtual environment
 python -m venv venv
 # Windows:
 .\venv\Scripts\activate
@@ -70,37 +89,130 @@ python -m venv venv
 source venv/bin/activate
 
 # Install dependencies
-python -m pip install -r requirements.txt
+pip install -r requirements.txt
 
-# Configure environment variables (optional: add API keys or keep DEFAULT_PROVIDER=mock)
+# Configure environment
 copy .env.example .env
+# Edit .env: set DATABASE_URL and at least one API key (or keep mock mode)
 
-# Run FastAPI Backend Server
-python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
+# Start server
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
-*Backend API and Interactive Swagger documentation will be live at `http://127.0.0.1:8000/docs`.*
 
----
+API docs: `http://127.0.0.1:8000/docs`
 
-### Step 2: Frontend Setup (Next.js SaaS UI)
+### 2. Frontend
 
 ```bash
-# In a new terminal, navigate to frontend folder
 cd frontend
 
-# Install dependencies
 npm install
-
-# Start Next.js Development Server
 npm run dev
 ```
-*Frontend SaaS Dashboard will be live at `http://localhost:3000`.*
+
+Dashboard: `http://localhost:3000`
+
+### 3. One-Click Launch (Windows)
+
+```bash
+start_dev.bat
+```
+
+Opens two terminals — backend on `:8000`, frontend on `:3000`.
 
 ---
 
-## 🧪 Automated Testing
+## Environment Variables
 
-Run the test suite to verify the cascading pipeline, low-confidence escalation, threshold gates, and cost ledger calculations:
+All variables are configured in `backend/.env`. Copy `.env.example` to get started.
+
+### Server
+
+| Variable | Default | Description |
+|---|---|---|
+| `HOST` | `127.0.0.1` | Backend bind address |
+| `PORT` | `8000` | Backend port |
+
+### Database
+
+| Variable | Default | Description |
+|---|---|---|
+| `DATABASE_URL` | *(required)* | PostgreSQL connection string. Format: `postgresql+asyncpg://user:pass@host:5432/cost_aware` |
+
+### Provider API Keys
+
+| Variable | Default | Description |
+|---|---|---|
+| `DEFAULT_PROVIDER` | *(auto-detect)* | Active provider: `gemini`, `groq`, `mistral`, `anthropic`, `openai`, or `mock` |
+| `GEMINI_API_KEY` | `""` | Google Gemini API key ([get key](https://aistudio.google.com/app/apikey)) |
+| `GROQ_API_KEY` | `""` | Groq LPU API key ([get key](https://console.groq.com/keys)) |
+| `MISTRAL_API_KEY` | `""` | Mistral AI API key ([get key](https://console.mistral.ai/)) |
+| `ANTHROPIC_API_KEY` | `""` | Anthropic Claude API key ([get key](https://console.anthropic.com/)) |
+| `OPENAI_API_KEY` | `""` | OpenAI API key ([get key](https://platform.openai.com/api-keys)) |
+
+### Routing
+
+| Variable | Default | Description |
+|---|---|---|
+| `CONFIDENCE_THRESHOLD` | `0.75` | Tier 1-to-2 escalation gate (0.0 to 1.0) |
+| `PARETO_QUALITY_WEIGHT` | `0.45` | Pareto scoring: quality dimension weight |
+| `PARETO_LATENCY_WEIGHT` | `0.30` | Pareto scoring: latency dimension weight |
+| `PARETO_COST_WEIGHT` | `0.25` | Pareto scoring: cost dimension weight |
+
+### Quality Evaluation
+
+| Variable | Default | Description |
+|---|---|---|
+| `QUALITY_EVALUATION_ENABLED` | `true` | Toggle hybrid quality evaluation on/off |
+| `JUDGE_MODEL_PROVIDER` | `anthropic` | Provider for the LLM judge used in quality scoring |
+| `JUDGE_MODEL_NAME` | `claude-3-5-haiku-20241022` | Model used as the LLM judge |
+
+### Quality Recovery
+
+| Variable | Default | Description |
+|---|---|---|
+| `QUALITY_RECOVERY_ENABLED` | `true` | Toggle quality recovery (revise/escalate) on/off |
+| `QUALITY_ACCEPT_THRESHOLD` | `0.90` | Quality score >= this: accept as-is |
+| `QUALITY_REVISE_THRESHOLD` | `0.80` | Quality score >= this but < accept: attempt one revision |
+| `QUALITY_REVISION_MODEL` | `""` | Dedicated revision model (empty = reuse current model) |
+| `QUALITY_MAX_REVISIONS` | `1` | Maximum revision attempts before escalating |
+
+### Security
+
+| Variable | Default | Description |
+|---|---|---|
+| `ENCRYPTION_SECRET_KEY` | `""` | Fernet key for encrypting stored API keys |
+
+---
+
+## Database Schema
+
+Five tables in PostgreSQL (auto-created on first run):
+
+| Table | Purpose |
+|---|---|
+| `models` | LLM model registry — 20 models across 6 providers with capabilities and quality scores |
+| `model_pricing` | Versioned pricing per model (input/output cost per million tokens, effective dates) |
+| `model_quality_evaluations` | Quality evaluation records per query (task type, scores, metrics) |
+| `model_quality_recoveries` | Quality recovery action log (revision attempts, escalation outcomes) |
+| `user_api_keys` | Per-user Fernet-encrypted API key store |
+
+---
+
+## Providers
+
+| Provider | Free Tier | Tier 1 (Fast/Cheap) | Tier 2 (Frontier) |
+|---|---|---|---|
+| **Google Gemini** | Yes | Gemini 2.5 Flash | Gemini 2.5 Flash Deep Synthesis |
+| **Groq** | Yes | Llama 3.1 8B Instant, Qwen 3.8, GPT-OSS 120B | Llama 3.3 70B, Qwen Frontier, GPT-OSS 120B Frontier |
+| **Mistral AI** | Yes | Mistral Small | Mistral Large |
+| **Anthropic** | No (paid) | Claude 3.5 Haiku ($0.80/$4.00 per 1M) | Claude 3.5 Sonnet ($3.00/$15.00 per 1M) |
+| **OpenAI** | No (paid) | GPT-4o-mini ($0.15/$0.60 per 1M) | GPT-4o ($2.50/$10.00 per 1M) |
+| **Mock** | Yes (zero-cost) | Simulated Haiku | Simulated Sonnet |
+
+---
+
+## Testing
 
 ```bash
 python -m pytest backend/tests -v
@@ -108,11 +220,6 @@ python -m pytest backend/tests -v
 
 ---
 
-## 📊 Features & UI Capabilities
+## API Documentation
 
-1. **Interactive Cascade Visualizer**: Animated pipeline tracking Tier 1 inference, confidence gauge (0.00 to 1.00), threshold edge, and escalation badges.
-2. **Instant Presets**:
-   - *Complicated Q&A*: Simulates complex query triggering `confidence = 0.61 < 0.75` ➔ `ESCALATE` (reason: `low_confidence`) ➔ Sonnet final answer.
-   - *Simple FAQ*: Solves instantly with high confidence `0.94` at Tier 1, avoiding frontier cost.
-3. **Spend Justification Ledger**: Automatically generates executive financial reasoning explaining why the extra money was (or wasn't) spent.
-4. **ROI Analytics**: Real-time aggregated statistics comparing total spend vs Sonnet-only baseline cost, net savings ($ and %), and escalation frequency.
+Interactive Swagger docs available at `http://127.0.0.1:8000/docs` when the backend is running.

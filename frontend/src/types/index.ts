@@ -111,6 +111,7 @@ export interface ChatResponse {
   total_latency_ms: number;
   quality_evaluation?: QualityEvaluationResult;
   quality_recovery?: QualityRecoveryResult;
+  key_source?: "user_db" | "server_env" | "mock";
   timestamp: string;
 }
 

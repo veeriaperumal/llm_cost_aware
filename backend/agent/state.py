@@ -4,6 +4,7 @@ from typing import TypedDict, Optional
 class RouterState(TypedDict):
     request_id: str
     tenant_id: str
+    user_id: Optional[str]
 
     task_type: str
     user_input: str
@@ -58,3 +59,5 @@ class RouterState(TypedDict):
     cost_breakdown: dict
     quality_evaluation: Optional[dict]
     quality_recovery: Optional[dict]
+
+    key_source: Optional[str]

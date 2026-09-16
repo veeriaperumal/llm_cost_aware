@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, Boolean, Integer, Float, DateTime, ForeignKey, Text
+from sqlalchemy import Column, String, Boolean, Integer, Float, DateTime, ForeignKey, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -82,3 +82,20 @@ class ModelQualityRecovery(Base):
     recovery_cost_usd = Column(Float, default=0.0)
     recovery_latency_ms = Column(Float, default=0.0)
     created_at = Column(DateTime(timezone=True), default=_now, nullable=False)
+
+
+class UserAPIKey(Base):
+    __tablename__ = "user_api_keys"
+    __table_args__ = (
+        UniqueConstraint("user_id", "provider_name", name="uq_user_provider_key"),
+    )
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    user_id = Column(String(100), nullable=False, index=True)
+    provider_name = Column(String(50), nullable=False, index=True)
+    encrypted_key = Column(Text, nullable=False)
+    key_hint = Column(String(50), nullable=False)
+    is_valid = Column(Boolean, default=True, nullable=False)
+    last_validated_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=_now, onupdate=_now, nullable=False)

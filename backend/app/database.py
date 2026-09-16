@@ -1,5 +1,6 @@
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.pool import NullPool
 from config.settings import settings
 
 db_url = settings.database_url
@@ -7,9 +8,7 @@ db_url = settings.database_url
 engine = create_async_engine(
     db_url,
     echo=False,
-    pool_pre_ping=True,
-    pool_size=10,
-    max_overflow=20,
+    poolclass=NullPool,
 )
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
@@ -24,12 +23,16 @@ async def get_db() -> AsyncSession:
 
 
 _checkpointer = None
+_checkpointer_loop = None
 
 
 async def get_checkpointer():
     """Initialize and return a PostgreSQL-backed LangGraph checkpointer or fallback to MemorySaver."""
-    global _checkpointer
-    if _checkpointer is None:
+    import asyncio
+    global _checkpointer, _checkpointer_loop
+    curr_loop = asyncio.get_running_loop()
+    if _checkpointer is None or _checkpointer_loop is not curr_loop:
+        _checkpointer_loop = curr_loop
         try:
             from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 

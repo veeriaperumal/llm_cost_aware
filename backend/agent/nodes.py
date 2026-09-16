@@ -95,8 +95,11 @@ async def select_models(state: RouterState) -> dict:
     from app.models.db_models import LLMModel, ModelPricing as DBModelPricing
     from app.graph.pareto import ModelCandidate, select_best
     from app.router.provider_client import LLMProviderClient
+    from app.services.key_service import KeyService
 
     provider = state["provider"]
+    user_id = state.get("user_id")
+    user_keys = await KeyService.get_all_decrypted_user_keys(user_id) if user_id else {}
     all_candidates: List[ModelCandidate] = []
 
     try:
@@ -114,6 +117,8 @@ async def select_models(state: RouterState) -> dict:
 
             for model, pricing in rows:
                 cost = pricing.input_price_per_million * 0.75 + pricing.output_price_per_million * 0.25
+                p_clean = model.provider_name.lower().strip()
+                has_key = bool(user_keys.get(p_clean)) or LLMProviderClient._provider_has_api_key(p_clean)
                 all_candidates.append(ModelCandidate(
                     model_id=model.id,
                     provider_name=model.provider_name,
@@ -122,7 +127,7 @@ async def select_models(state: RouterState) -> dict:
                     quality=model.base_quality_score,
                     latency_ms=model.expected_latency_ms,
                     cost_per_million=cost,
-                    has_api_key=LLMProviderClient._provider_has_api_key(model.provider_name),
+                    has_api_key=has_key,
                 ))
     except Exception as e:
         print(f"[select_models] DB query failed: {e}", file=sys.stderr)
@@ -162,16 +167,28 @@ async def execute_tier1(state: RouterState) -> dict:
     """Execute Tier 1 model (fast/cheap) and extract confidence."""
     from app.router.provider_client import LLMProviderClient
     from app.observability.cost_tracker import CostTracker
+    from app.services.key_service import KeyService
 
     provider = state["provider"]
     prompt = state["user_input"]
+    user_id = state.get("user_id")
     traces = list(state.get("traces", []))
     start = time.time()
+
+    # Determine key source for UI display
+    key_source = "mock"
+    if provider and provider.lower() != "mock":
+        key_source = "server_env"
+        if user_id:
+            user_key = await KeyService.get_decrypted_user_key(user_id, provider.lower())
+            if user_key:
+                key_source = "user_db"
 
     try:
         draft, conf, uncertainties, tokens, latency = await LLMProviderClient.execute_tier1(
             provider=provider,
             prompt=prompt,
+            user_id=user_id,
         )
     except Exception as e:
         err_str = str(e).lower()
@@ -194,7 +211,7 @@ async def execute_tier1(state: RouterState) -> dict:
             "attempts": state.get("attempts", []) + [{"node": "execute_tier1", "error": str(e)}],
         }
 
-    model_info = await LLMProviderClient.get_model_for_provider(provider, "tier1")
+    model_info = await LLMProviderClient.get_model_for_provider(provider, "tier1", user_id=user_id)
     model_id = model_info[0] if model_info else ""
     model_name = model_info[2] if model_info else f"{provider} tier1"
 
@@ -231,6 +248,7 @@ async def execute_tier1(state: RouterState) -> dict:
         "tier1_model_name": model_name,
         "traces": traces,
         "actual_cost": state.get("actual_cost", 0.0) + tier1_cost,
+        "key_source": key_source,
     }
 
 
@@ -283,6 +301,7 @@ async def execute_tier2(state: RouterState) -> dict:
 
     provider = state["provider"]
     prompt = state["user_input"]
+    user_id = state.get("user_id")
     tier1_draft = state.get("tier1_draft", "")
     escalation_reason = state.get("escalation_reason", "LOW_CONFIDENCE")
     uncertainty = state.get("tier1_uncertainty_reasons", [])
@@ -296,6 +315,7 @@ async def execute_tier2(state: RouterState) -> dict:
             tier1_draft=tier1_draft,
             escalation_reason=escalation_reason,
             uncertainty_reasons=uncertainty,
+            user_id=user_id,
         )
     except Exception as e:
         err_str = str(e).lower()
@@ -316,7 +336,7 @@ async def execute_tier2(state: RouterState) -> dict:
             "attempts": state.get("attempts", []) + [{"node": "execute_tier2", "error": str(e)}],
         }
 
-    model_info = await LLMProviderClient.get_model_for_provider(provider, "tier2")
+    model_info = await LLMProviderClient.get_model_for_provider(provider, "tier2", user_id=user_id)
     model_id = model_info[0] if model_info else ""
     model_name = model_info[2] if model_info else f"{provider} tier2"
 
