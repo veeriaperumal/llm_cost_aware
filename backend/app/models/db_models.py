@@ -32,6 +32,7 @@ class LLMModel(Base):
     created_at = Column(DateTime(timezone=True), default=_now, nullable=False)
 
     pricing = relationship("ModelPricing", back_populates="model", lazy="selectin")
+    evaluations = relationship("ModelQualityEvaluation", back_populates="model", lazy="selectin")
 
 
 class ModelPricing(Base):
@@ -48,3 +49,19 @@ class ModelPricing(Base):
     created_at = Column(DateTime(timezone=True), default=_now, nullable=False)
 
     model = relationship("LLMModel", back_populates="pricing")
+
+
+class ModelQualityEvaluation(Base):
+    __tablename__ = "model_quality_evaluations"
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    model_id = Column(String(36), ForeignKey("models.id"), nullable=False, index=True)
+    query_id = Column(String(50), nullable=False)
+    task_type = Column(String(30), nullable=False)
+    quality_score = Column(Float, nullable=False)
+    deterministic_score = Column(Float, nullable=True)
+    llm_judge_score = Column(Float, nullable=True)
+    metrics_json = Column(Text, default="{}")
+    evaluated_at = Column(DateTime(timezone=True), default=_now, nullable=False)
+
+    model = relationship("LLMModel", back_populates="evaluations")

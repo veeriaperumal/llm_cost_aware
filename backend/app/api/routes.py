@@ -205,3 +205,48 @@ async def get_providers():
         "pricing_catalog": settings.pricing_catalog,
         "providers": providers_meta,
     }
+
+
+@router.get("/quality", summary="Get Quality Evaluation History")
+async def get_quality_evaluations(
+    model_id: Optional[str] = None,
+    task_type: Optional[str] = None,
+    limit: int = 50,
+):
+    """Returns recent quality evaluation records, optionally filtered by model_id and task_type."""
+    try:
+        from sqlalchemy import select
+        from app.database import async_session
+        from app.models.db_models import ModelQualityEvaluation, LLMModel
+
+        async with async_session() as session:
+            stmt = select(ModelQualityEvaluation).order_by(ModelQualityEvaluation.evaluated_at.desc()).limit(limit)
+            if model_id:
+                stmt = stmt.where(ModelQualityEvaluation.model_id == model_id)
+            if task_type:
+                stmt = stmt.where(ModelQualityEvaluation.task_type == task_type)
+            result = await session.execute(stmt)
+            evals = result.scalars().all()
+
+            items = []
+            for e in evals:
+                model_stmt = select(LLMModel).where(LLMModel.id == e.model_id)
+                model_result = await session.execute(model_stmt)
+                model = model_result.scalars().first()
+                items.append({
+                    "id": e.id,
+                    "model_id": e.model_id,
+                    "model_name": model.display_name if model else "Unknown",
+                    "provider_name": model.provider_name if model else "Unknown",
+                    "query_id": e.query_id,
+                    "task_type": e.task_type,
+                    "quality_score": e.quality_score,
+                    "deterministic_score": e.deterministic_score,
+                    "llm_judge_score": e.llm_judge_score,
+                    "metrics_json": e.metrics_json,
+                    "evaluated_at": e.evaluated_at.isoformat() if e.evaluated_at else "",
+                })
+
+            return {"evaluations": items, "count": len(items)}
+    except Exception:
+        return {"evaluations": [], "count": 0}

@@ -13,7 +13,7 @@ try:
     from config.settings import settings
     from app.models.schemas import (
         ChatRequest, ChatResponse, ModelExecutionTrace,
-        EscalationEvent, TokenMetrics, QueryHistoryItem
+        EscalationEvent, TokenMetrics, QueryHistoryItem, QualityEvaluationResult,
     )
     from app.router.provider_client import LLMProviderClient
     from app.observability.cost_tracker import CostTracker
@@ -22,11 +22,13 @@ except ImportError:
     from config.settings import settings
     from app.models.schemas import (
         ChatRequest, ChatResponse, ModelExecutionTrace,
-        EscalationEvent, TokenMetrics, QueryHistoryItem
+        EscalationEvent, TokenMetrics, QueryHistoryItem, QualityEvaluationResult,
     )
     from app.router.provider_client import LLMProviderClient
     from app.observability.cost_tracker import CostTracker
     from app.persistence.history_store import history_store
+
+from app.database import async_session
 
 class CascadingRouter:
     """
@@ -163,6 +165,46 @@ class CascadingRouter:
             served_by_model = tier2_display_name
 
         # ---------------------------------------------------------------------
+        # STEP 3b: Quality Evaluation (hybrid deterministic + LLM judge)
+        # ---------------------------------------------------------------------
+        quality_eval: Optional[QualityEvaluationResult] = None
+        if settings.quality_evaluation_enabled:
+            try:
+                from app.evaluation.composite import evaluate_quality
+
+                eval_result = await evaluate_quality(
+                    prompt=request.prompt,
+                    response=final_answer,
+                    model_id=tier2_model_id if should_escalate else tier1_model_id,
+                    query_id=query_id,
+                )
+                quality_eval = QualityEvaluationResult(**eval_result)
+
+                # Persist quality evaluation to DB
+                try:
+                    async with async_session() as session:
+                        from app.models.db_models import ModelQualityEvaluation
+                        import json
+                        eval_db = ModelQualityEvaluation(
+                            id=f"qeval_{uuid.uuid4().hex[:10]}",
+                            model_id=tier2_model_id if should_escalate else tier1_model_id,
+                            query_id=query_id,
+                            task_type=eval_result["task_type"],
+                            quality_score=eval_result["quality_score"],
+                            deterministic_score=eval_result.get("deterministic_score"),
+                            llm_judge_score=eval_result.get("llm_judge_score"),
+                            metrics_json=json.dumps(eval_result.get("metrics", {})),
+                        )
+                        session.add(eval_db)
+                        await session.commit()
+                except Exception as e:
+                    print(f"[quality_eval] DB persist failed (non-critical): {e}", file=sys.stderr)
+
+            except Exception as e:
+                print(f"[quality_eval] Evaluation failed (non-critical): {e}", file=sys.stderr)
+                quality_eval = None
+
+        # ---------------------------------------------------------------------
         # STEP 4: Calculate Cost Breakdown & Audit Justification
         # ---------------------------------------------------------------------
         cost_breakdown = await CostTracker.calculate_cost_breakdown(
@@ -188,6 +230,7 @@ class CascadingRouter:
             traces=traces,
             cost_breakdown=cost_breakdown,
             total_latency_ms=total_latency_ms,
+            quality_evaluation=quality_eval,
             timestamp=utc_now
         )
 
