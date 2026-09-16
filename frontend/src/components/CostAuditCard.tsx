@@ -1,8 +1,8 @@
 "use client";
 
 import React from "react";
-import { ChatResponse } from "../types";
-import { DollarSign, TrendingDown, Scale } from "lucide-react";
+import { ChatResponse, EscalationReason, ESCALATION_LABELS, ESCALATION_COLORS } from "../types";
+import { DollarSign, TrendingDown, Scale, ShieldAlert } from "lucide-react";
 
 interface CostAuditCardProps {
   response: ChatResponse | null;
@@ -23,6 +23,17 @@ export const CostAuditCard: React.FC<CostAuditCardProps> = ({ response }) => {
           <span className="text-xs font-semibold text-neutral-200">
             Cost Audit
           </span>
+          {isEscalated && escalation.reason && (
+            <span
+              className={`text-[10px] px-1.5 py-0.5 rounded border font-bold ${
+                ESCALATION_COLORS[(escalation.reason as EscalationReason)] ||
+                "bg-neutral-500/20 text-neutral-300 border-neutral-500/30"
+              }`}
+            >
+              {ESCALATION_LABELS[(escalation.reason as EscalationReason)] ||
+                escalation.reason}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-1 text-[10px]">
           <Scale className="w-3 h-3 text-blue-400" />

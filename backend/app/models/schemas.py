@@ -8,6 +8,7 @@ class ChatRequest(BaseModel):
     confidence_threshold: Optional[float] = Field(0.75, ge=0.0, le=1.0, description="Confidence threshold for escalation")
     force_escalation: Optional[bool] = Field(False, description="Force Tier 2 escalation for testing")
     force_tier1_only: Optional[bool] = Field(False, description="Force Tier 1 response only without escalation")
+    user_id: Optional[str] = Field(None, description="Client session or user identifier for custom API keys")
 
 class TokenMetrics(BaseModel):
     input_tokens: int = 0
@@ -61,6 +62,7 @@ class ChatResponse(BaseModel):
     total_latency_ms: float
     quality_evaluation: Optional[QualityEvaluationResult] = None
     quality_recovery: Optional[QualityRecoveryResult] = None
+    key_source: Optional[str] = None  # "user_db", "server_env", or "mock"
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class QueryHistoryItem(BaseModel):
@@ -153,3 +155,30 @@ class QualityRecoveryResult(BaseModel):
     recovery_model_id: Optional[str] = None
     recovery_cost_usd: float = 0.0
     recovery_latency_ms: float = 0.0
+
+
+class APIKeyItem(BaseModel):
+    id: str
+    user_id: str
+    provider_name: str
+    key_hint: str
+    is_valid: bool = True
+    last_validated_at: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class SaveAPIKeyRequest(BaseModel):
+    provider_name: str = Field(..., description="gemini, groq, anthropic, openai, mistral")
+    api_key: str = Field(..., description="Raw API key to encrypt and save")
+
+
+class ValidateKeyRequest(BaseModel):
+    provider_name: str = Field(..., description="gemini, groq, anthropic, openai, mistral")
+    api_key: Optional[str] = Field(None, description="Raw API key to test; if omitted, tests saved key for user")
+
+
+class ValidateKeyResponse(BaseModel):
+    provider_name: str
+    is_valid: bool
+    message: str

@@ -1,26 +1,111 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Header, status
 from typing import List, Dict, Any, Optional
 
 from config.settings import settings
-from app.models.schemas import ChatRequest, ChatResponse, QueryHistoryItem, AnalyticsSummary, ModelInfo, ModelPricingInfo
+from app.models.schemas import (
+    ChatRequest, ChatResponse, QueryHistoryItem, AnalyticsSummary,
+    ModelInfo, ModelPricingInfo, APIKeyItem, SaveAPIKeyRequest,
+    ValidateKeyRequest, ValidateKeyResponse,
+)
 from app.graph.cascading_router import CascadingRouter
 from app.persistence.history_store import history_store
+from app.services.key_service import KeyService
+from app.router.provider_client import LLMProviderClient
 
 router = APIRouter()
 
 
 @router.post("/chat", response_model=ChatResponse, summary="Execute Cost-Aware Cascading LLM Pipeline")
-async def chat_endpoint(request: ChatRequest):
+async def chat_endpoint(
+    request: ChatRequest,
+    x_user_id: Optional[str] = Header(None, alias="X-User-ID"),
+):
     """
     Submits a prompt to the Cascading Router.
     Flow: User Prompt -> Tier 1 (Haiku) -> Confidence Evaluation -> If < threshold, ESCALATE to Tier 2 (Sonnet).
     Records why extra money was spent in the Cost Audit breakdown.
     """
     try:
+        if not request.user_id and x_user_id:
+            request.user_id = x_user_id
         response = await CascadingRouter.process_query(request)
         return response
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error executing cascading router: {str(e)}")
+
+
+@router.get("/keys", response_model=List[APIKeyItem], summary="Get Saved User API Keys (Masked)")
+async def get_user_keys(
+    user_id: Optional[str] = Query(None),
+    x_user_id: Optional[str] = Header(None, alias="X-User-ID"),
+):
+    """Returns the masked API keys saved in the database for the active user."""
+    active_user_id = user_id or x_user_id or "default_user"
+    keys = await KeyService.get_user_keys(active_user_id)
+    return keys
+
+
+@router.post("/keys", response_model=APIKeyItem, summary="Save or Update User API Key (Encrypted)")
+async def save_user_key(
+    request: SaveAPIKeyRequest,
+    user_id: Optional[str] = Query(None),
+    x_user_id: Optional[str] = Header(None, alias="X-User-ID"),
+):
+    """Encrypts and persists an API key in the database for the given user."""
+    active_user_id = user_id or x_user_id or "default_user"
+    try:
+        # Validate key format / ping
+        is_valid, _ = await KeyService.validate_provider_key(request.provider_name, request.api_key)
+        saved = await KeyService.upsert_user_key(
+            user_id=active_user_id,
+            provider=request.provider_name,
+            raw_key=request.api_key,
+            is_valid=is_valid,
+        )
+        return saved
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.delete("/keys/{provider}", summary="Delete Saved User API Key")
+async def delete_user_key(
+    provider: str,
+    user_id: Optional[str] = Query(None),
+    x_user_id: Optional[str] = Header(None, alias="X-User-ID"),
+):
+    """Removes a saved API key from the database for the given user."""
+    active_user_id = user_id or x_user_id or "default_user"
+    deleted = await KeyService.delete_user_key(active_user_id, provider)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"No key found for provider '{provider}'")
+    return {"message": f"API key for '{provider}' successfully removed"}
+
+
+@router.post("/keys/validate", response_model=ValidateKeyResponse, summary="Validate Provider API Key")
+async def validate_api_key(
+    request: ValidateKeyRequest,
+    user_id: Optional[str] = Query(None),
+    x_user_id: Optional[str] = Header(None, alias="X-User-ID"),
+):
+    """Tests an API key connection against live provider endpoints."""
+    active_user_id = user_id or x_user_id or "default_user"
+    raw_key = request.api_key
+    if not raw_key:
+        raw_key = await KeyService.get_decrypted_user_key(active_user_id, request.provider_name)
+    
+    if not raw_key:
+        return ValidateKeyResponse(
+            provider_name=request.provider_name,
+            is_valid=False,
+            message="No API key provided or found in database"
+        )
+    
+    is_valid, message = await KeyService.validate_provider_key(request.provider_name, raw_key)
+    return ValidateKeyResponse(
+        provider_name=request.provider_name,
+        is_valid=is_valid,
+        message=message,
+    )
 
 
 @router.get("/history", response_model=List[QueryHistoryItem], summary="Get Query & Escalation Audit History")
@@ -43,13 +128,19 @@ async def get_analytics():
 
 
 @router.get("/models", response_model=List[ModelInfo], summary="Get All Registered LLM Models")
-async def get_models():
+async def get_models(
+    user_id: Optional[str] = Query(None),
+    x_user_id: Optional[str] = Header(None, alias="X-User-ID"),
+):
     """Returns all registered models with their active pricing and Pareto scores from the database."""
     try:
         from sqlalchemy import select
         from app.database import async_session
         from app.models.db_models import LLMModel, ModelPricing as DBModelPricing
         from app.graph.pareto import ModelCandidate, get_pareto_scores
+
+        active_user_id = user_id or x_user_id
+        user_keys = await KeyService.get_all_decrypted_user_keys(active_user_id) if active_user_id else {}
 
         async with async_session() as session:
             stmt = select(LLMModel).where(LLMModel.active == True).order_by(LLMModel.provider_name, LLMModel.tier)
@@ -74,6 +165,8 @@ async def get_models():
 
                 if pricing:
                     cost = pricing.input_price_per_million * 0.75 + pricing.output_price_per_million * 0.25
+                    p_clean = m.provider_name.lower().strip()
+                    has_key = bool(user_keys.get(p_clean)) or LLMProviderClient._provider_has_api_key(p_clean)
                     tier_candidates[m.tier].append(ModelCandidate(
                         model_id=m.id,
                         provider_name=m.provider_name,
@@ -82,6 +175,7 @@ async def get_models():
                         quality=m.base_quality_score,
                         latency_ms=m.expected_latency_ms,
                         cost_per_million=cost,
+                        has_api_key=has_key,
                     ))
 
             # Compute Pareto scores per tier

@@ -1,12 +1,14 @@
 "use client";
 
 import React from "react";
-import { PanelLeft, Sparkles, Activity, Layers, HelpCircle } from "lucide-react";
+import { PanelLeft, Sparkles, Activity, Layers, HelpCircle, Key } from "lucide-react";
 
 interface NavbarProps {
   provider: string;
   setProvider: (p: string) => void;
   onOpenGuide: () => void;
+  onOpenKeys: () => void;
+  keysCount?: number;
   activeTab: "playground" | "analytics" | "history";
   setActiveTab: (tab: "playground" | "analytics" | "history") => void;
   sidebarOpen: boolean;
@@ -18,6 +20,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   provider,
   setProvider,
   onOpenGuide,
+  onOpenKeys,
+  keysCount = 0,
   activeTab,
   setActiveTab,
   sidebarOpen,
@@ -82,8 +86,22 @@ export const Navbar: React.FC<NavbarProps> = ({
         </button>
       </nav>
 
-      {/* Right: Provider + Guide */}
+      {/* Right: API Keys + Provider + Guide */}
       <div className="flex items-center gap-2">
+        <button
+          onClick={onOpenKeys}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#2f2f2f] hover:bg-neutral-700 border border-neutral-700 text-xs font-medium text-neutral-200 transition"
+          title="Manage API Keys"
+        >
+          <Key className="w-3.5 h-3.5 text-blue-400" />
+          <span className="hidden md:inline">API Keys</span>
+          {keysCount > 0 ? (
+            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+          ) : (
+            <span className="w-2 h-2 rounded-full bg-neutral-500"></span>
+          )}
+        </button>
+
         <select
           value={provider}
           onChange={(e) => setProvider(e.target.value)}

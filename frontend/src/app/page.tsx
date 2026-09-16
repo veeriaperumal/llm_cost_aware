@@ -6,6 +6,7 @@ import { CascadeFlow } from "@/components/CascadeFlow";
 import { CostAuditCard } from "@/components/CostAuditCard";
 import { AuditLedger } from "@/components/AuditLedger";
 import { FreeTierGuideModal } from "@/components/FreeTierGuideModal";
+import { ApiKeyModal } from "@/components/ApiKeyModal";
 import { ChatResponse, QueryHistoryItem, AnalyticsSummary } from "@/types";
 import {
   Send,
@@ -55,6 +56,9 @@ export default function Home() {
     "playground" | "analytics" | "history"
   >("playground");
   const [isGuideOpen, setIsGuideOpen] = useState<boolean>(false);
+  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState<boolean>(false);
+  const [userId, setUserId] = useState<string>("");
+  const [userKeysCount, setUserKeysCount] = useState<number>(0);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState<string>("");
@@ -101,11 +105,31 @@ export default function Home() {
     }, 16);
   };
 
-  const fetchAuditData = async () => {
+  const fetchUserKeysCount = async (uid: string) => {
+    if (!uid) return;
     try {
-      const historyRes = await fetch("/api/history");
+      const res = await fetch(`/api/keys?user_id=${encodeURIComponent(uid)}`, {
+        headers: { "X-User-ID": uid },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setUserKeysCount(Array.isArray(data) ? data.length : 0);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const fetchAuditData = async (uid?: string) => {
+    const activeUid = uid || userId;
+    try {
+      const historyRes = await fetch("/api/history", {
+        headers: activeUid ? { "X-User-ID": activeUid } : {},
+      });
       if (historyRes.ok) setHistory(await historyRes.json());
-      const analyticsRes = await fetch("/api/analytics");
+      const analyticsRes = await fetch("/api/analytics", {
+        headers: activeUid ? { "X-User-ID": activeUid } : {},
+      });
       if (analyticsRes.ok) setAnalytics(await analyticsRes.json());
     } catch {
       console.log("Backend offline or local simulation active");
@@ -113,7 +137,17 @@ export default function Home() {
   };
 
   useEffect(() => {
-    fetchAuditData();
+    let storedId = "";
+    if (typeof window !== "undefined") {
+      storedId = localStorage.getItem("cost_aware_user_id") || "";
+      if (!storedId) {
+        storedId = `usr_${Math.random().toString(36).substring(2, 11)}_${Date.now()}`;
+        localStorage.setItem("cost_aware_user_id", storedId);
+      }
+      setUserId(storedId);
+      fetchUserKeysCount(storedId);
+      fetchAuditData(storedId);
+    }
   }, []);
 
   const handleSubmit = async (e?: React.FormEvent) => {
@@ -140,15 +174,19 @@ export default function Home() {
     const assistantId = `assistant-${Date.now()}`;
 
     try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (userId) headers["X-User-ID"] = userId;
+
       const res = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           prompt: userMsg.content,
           provider,
           confidence_threshold: threshold,
           force_escalation: forceEscalation,
           force_tier1_only: forceTier1Only,
+          user_id: userId || undefined,
         }),
       });
 
@@ -166,7 +204,7 @@ export default function Home() {
       setMessages((prev) => [...prev, assistantMsg]);
       streamText(data.final_answer, assistantId);
       setRightPanelOpen(true);
-      fetchAuditData();
+      fetchAuditData(userId);
     } catch (err: unknown) {
       console.error("Chat API error:", err);
       const errText = err instanceof Error ? err.message : String(err);
@@ -222,6 +260,8 @@ export default function Home() {
         provider={provider}
         setProvider={setProvider}
         onOpenGuide={() => setIsGuideOpen(true)}
+        onOpenKeys={() => setIsApiKeyModalOpen(true)}
+        keysCount={userKeysCount}
         activeTab={activeTab}
         setActiveTab={(tab) => {
           setActiveTab(tab);
@@ -230,6 +270,16 @@ export default function Home() {
         sidebarOpen={sidebarOpen}
         setSidebarOpen={setSidebarOpen}
         onNewChat={newChat}
+      />
+
+      <ApiKeyModal
+        isOpen={isApiKeyModalOpen}
+        onClose={() => setIsApiKeyModalOpen(false)}
+        userId={userId}
+        onKeysUpdated={() => {
+          fetchUserKeysCount(userId);
+          fetchAuditData(userId);
+        }}
       />
 
       <FreeTierGuideModal

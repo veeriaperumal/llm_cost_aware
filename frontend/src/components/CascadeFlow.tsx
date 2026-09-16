@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { ChatResponse } from "../types";
+import { ChatResponse, EscalationReason, ESCALATION_LABELS, ESCALATION_COLORS } from "../types";
 import {
   ArrowDown,
   AlertTriangle,
@@ -9,6 +9,7 @@ import {
   DollarSign,
   ShieldAlert,
   Cpu,
+  Key,
 } from "lucide-react";
 
 interface CascadeFlowProps {
@@ -52,6 +53,14 @@ export const CascadeFlow: React.FC<CascadeFlowProps> = ({
   const tier1Trace = response.traces.find((t) => t.tier === "tier1");
   const tier2Trace = response.traces.find((t) => t.tier === "tier2");
 
+  const keySource = response.key_source;
+  const keySourceConfig = {
+    user_db: { label: "Your API Key", color: "bg-violet-500/20 text-violet-300 border-violet-500/30", icon: "🔑" },
+    server_env: { label: "Server Key", color: "bg-orange-500/20 text-orange-300 border-orange-500/30", icon: "🖥" },
+    mock: { label: "Mock (No Key)", color: "bg-neutral-500/20 text-neutral-400 border-neutral-500/30", icon: "🧪" },
+  };
+  const ks = keySource ? keySourceConfig[keySource] : null;
+
   return (
     <div className="rounded-xl border border-neutral-700 bg-[#2f2f2f] overflow-hidden">
       {/* Header */}
@@ -63,6 +72,11 @@ export const CascadeFlow: React.FC<CascadeFlowProps> = ({
           <span className="text-[10px] text-neutral-500 font-mono">
             {response.total_latency_ms}ms
           </span>
+          {ks && (
+            <span className={`text-[10px] px-1.5 py-0.5 rounded border font-bold ${ks.color}`}>
+              {ks.icon} {ks.label}
+            </span>
+          )}
         </div>
         <span
           className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
@@ -154,9 +168,17 @@ export const CascadeFlow: React.FC<CascadeFlowProps> = ({
                 <span className="text-[10px] font-bold text-amber-400 uppercase">
                   Escalate Gate
                 </span>
-                <span className="text-[10px] text-neutral-500 font-mono ml-auto">
-                  reason=&quot;{response.escalation.reason}&quot;
-                </span>
+                {response.escalation.reason && (
+                  <span
+                    className={`text-[10px] px-1.5 py-0.5 rounded border font-bold ${
+                      ESCALATION_COLORS[(response.escalation.reason as EscalationReason)] ||
+                      "bg-neutral-500/20 text-neutral-300 border-neutral-500/30"
+                    }`}
+                  >
+                    {ESCALATION_LABELS[(response.escalation.reason as EscalationReason)] ||
+                      response.escalation.reason}
+                  </span>
+                )}
               </div>
               <p className="text-[11px] text-neutral-400">
                 {response.escalation.explanation ||

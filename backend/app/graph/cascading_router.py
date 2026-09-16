@@ -2,331 +2,249 @@ import uuid
 import time
 import sys
 import os
-from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
 
-# Ensure both root and backend dirs are on sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
 
-try:
-    from config.settings import settings
-    from app.models.schemas import (
-        ChatRequest, ChatResponse, ModelExecutionTrace,
-        EscalationEvent, TokenMetrics, QueryHistoryItem, QualityEvaluationResult, QualityRecoveryResult,
-    )
-    from app.router.provider_client import LLMProviderClient
-    from app.observability.cost_tracker import CostTracker
-    from app.persistence.history_store import history_store
-except ImportError:
-    from config.settings import settings
-    from app.models.schemas import (
-        ChatRequest, ChatResponse, ModelExecutionTrace,
-        EscalationEvent, TokenMetrics, QueryHistoryItem, QualityEvaluationResult, QualityRecoveryResult,
-    )
-    from app.router.provider_client import LLMProviderClient
-    from app.observability.cost_tracker import CostTracker
-    from app.persistence.history_store import history_store
+from config.settings import settings
+from app.models.schemas import (
+    ChatRequest, ChatResponse, ModelExecutionTrace,
+    EscalationEvent, TokenMetrics, QualityEvaluationResult, QualityRecoveryResult,
+)
 
-from app.database import async_session
 
 class CascadingRouter:
     """
-    Cascading Multi-Tier LLM Router.
-    Implements:
-      User Prompt -> Tier 1 (Haiku) -> Confidence Evaluation -> Decision Edge
-        -> If confidence < threshold: ESCALATE (reason="low_confidence") -> Tier 2 (Sonnet) -> Final Answer
-        -> Else: Tier 1 Direct -> Final Answer
-      Cost & Audit Ledger logs why the extra money was spent.
+    Cascading Multi-Tier LLM Router backed by LangGraph.
+
+    Graph flow:
+      START → classify_task → select_models → execute_tier1 → decide_escalation
+        → [if escalated] execute_tier2 → evaluate_quality
+        → [if direct]    evaluate_quality
+        → recover_quality → compute_costs → finalize → END
     """
+
+    _graph = None
+    _checkpointer = None
+    _loop = None
+
+    @classmethod
+    async def _get_graph(cls):
+        import asyncio
+        curr_loop = asyncio.get_running_loop()
+        if cls._graph is None or cls._loop is not curr_loop:
+            from agent.graph import build_router_graph
+            from app.database import get_checkpointer
+
+            cls._loop = curr_loop
+            cls._checkpointer = await get_checkpointer()
+            graph = build_router_graph()
+            cls._graph = graph.compile(checkpointer=cls._checkpointer)
+        return cls._graph
 
     @classmethod
     async def process_query(cls, request: ChatRequest) -> ChatResponse:
         total_start = time.time()
         query_id = f"qry_{uuid.uuid4().hex[:10]}"
         provider = (request.provider or settings.default_provider).lower()
-        threshold = request.confidence_threshold if request.confidence_threshold is not None else settings.confidence_threshold
-
-        tier1_model_info = await LLMProviderClient.get_model_for_provider(provider, "tier1")
-        tier2_model_info = await LLMProviderClient.get_model_for_provider(provider, "tier2")
-
-        tier1_model_id = tier1_model_info[0] if tier1_model_info else None
-        tier1_model_name = tier1_model_info[1] if tier1_model_info else None
-        tier1_display_name = tier1_model_info[2] if tier1_model_info else f"{provider} tier1"
-        tier1_pareto_provider = tier1_model_info[3] if tier1_model_info else provider
-
-        tier2_model_id = tier2_model_info[0] if tier2_model_info else None
-        tier2_model_name = tier2_model_info[1] if tier2_model_info else None
-        tier2_display_name = tier2_model_info[2] if tier2_model_info else f"{provider} tier2"
-        tier2_pareto_provider = tier2_model_info[3] if tier2_model_info else provider
-
-        active_provider = tier1_pareto_provider
-
-        traces: List[ModelExecutionTrace] = []
-
-        # ---------------------------------------------------------------------
-        # STEP 1: Execute Tier 1 Model (Pareto-selected)
-        # ---------------------------------------------------------------------
-        tier1_draft, tier1_conf, tier1_uncertainties, tier1_tokens, tier1_latency = await LLMProviderClient.execute_tier1(
-            provider=active_provider,
-            prompt=request.prompt
+        threshold = (
+            request.confidence_threshold
+            if request.confidence_threshold is not None
+            else settings.confidence_threshold
         )
 
-        tier1_cost, tier1_pricing_id = await CostTracker.calculate_model_cost(
-            provider=active_provider,
-            tier="tier1",
-            input_tokens=tier1_tokens.input_tokens,
-            output_tokens=tier1_tokens.output_tokens,
-            model_id=tier1_model_id,
-        )
+        graph = await cls._get_graph()
 
-        tier1_trace = ModelExecutionTrace(
-            model_name=tier1_display_name,
-            tier="tier1",
-            prompt=request.prompt,
-            response_text=tier1_draft,
-            confidence=tier1_conf,
-            uncertainty_reasons=tier1_uncertainties,
-            tokens=tier1_tokens,
-            cost_usd=tier1_cost,
-            latency_ms=tier1_latency,
-            model_id=tier1_model_id,
-            pricing_id=tier1_pricing_id,
-        )
-        traces.append(tier1_trace)
+        initial_state = {
+            "request_id": query_id,
+            "tenant_id": "default",
+            "user_id": request.user_id,
+            "user_input": request.prompt,
+            "provider": provider,
+            "confidence_threshold": threshold,
+            "force_escalation": request.force_escalation or False,
+            "force_tier1_only": request.force_tier1_only or False,
+            "task_type": "",
+            "complexity_score": 0.0,
+            "requires_tools": False,
+            "candidate_models": [],
+            "eligible_models": [],
+            "pareto_models": [],
+            "selected_model": "",
+            "routing_score": 0.0,
+            "routing_factors": {},
+            "attempts": [],
+            "tool_calls": [],
+            "quality_score": 0.0,
+            "evaluation": {},
+            "escalation_reason": None,
+            "retry_count": 0,
+            "budget_remaining": 1.0,
+            "estimated_cost": 0.0,
+            "actual_cost": 0.0,
+            "final_response": "",
+            "status": "running",
+            "tier1_draft": "",
+            "tier1_confidence": 0.0,
+            "tier1_uncertainty_reasons": [],
+            "tier1_tokens": {},
+            "tier1_latency_ms": 0.0,
+            "tier1_model_id": "",
+            "tier1_model_name": "",
+            "tier2_answer": "",
+            "tier2_tokens": {},
+            "tier2_latency_ms": 0.0,
+            "tier2_model_id": "",
+            "tier2_model_name": "",
+            "traces": [],
+            "cost_breakdown": {},
+            "quality_evaluation": None,
+            "quality_recovery": None,
+        }
 
-        # ---------------------------------------------------------------------
-        # STEP 2: Confidence Decision Gate & Escalation Check
-        # ---------------------------------------------------------------------
-        should_escalate = False
-        escalation_reason: Optional[str] = None
-        escalation_explanation: Optional[str] = None
-
-        if request.force_escalation:
-            should_escalate = True
-            escalation_reason = "forced_override"
-            escalation_explanation = "Manual test override forced Tier 2 escalation."
-        elif not request.force_tier1_only and tier1_conf < threshold:
-            should_escalate = True
-            escalation_reason = "low_confidence"
-            reasons_str = "; ".join(tier1_uncertainties) if tier1_uncertainties else "Model expressed uncertainty on reasoning/nuance"
-            escalation_explanation = f"Confidence {tier1_conf:.2f} is below threshold {threshold:.2f}. Identified flags: {reasons_str}"
-
-        escalation_event = EscalationEvent(
-            escalated=should_escalate,
-            reason=escalation_reason,
-            explanation=escalation_explanation,
-            trigger_confidence=tier1_conf,
-            threshold=threshold
-        )
-
-        # ---------------------------------------------------------------------
-        # STEP 3: Execute Tier 2 Model (Pareto-selected) if Escalated
-        # ---------------------------------------------------------------------
-        tier2_tokens = TokenMetrics()
-        final_answer = tier1_draft
-        served_by_tier = "tier1"
-        served_by_model = tier1_display_name
-
-        if should_escalate:
-            tier2_answer, tier2_tokens, tier2_latency = await LLMProviderClient.execute_tier2(
-                provider=tier2_pareto_provider,
-                prompt=request.prompt,
-                tier1_draft=tier1_draft,
-                escalation_reason=escalation_reason or "low_confidence",
-                uncertainty_reasons=tier1_uncertainties
-            )
-
-            tier2_cost, tier2_pricing_id = await CostTracker.calculate_model_cost(
-                provider=tier2_pareto_provider,
-                tier="tier2",
-                input_tokens=tier2_tokens.input_tokens,
-                output_tokens=tier2_tokens.output_tokens,
-                model_id=tier2_model_id,
-            )
-
-            tier2_trace = ModelExecutionTrace(
-                model_name=tier2_display_name,
-                tier="tier2",
-                prompt=f"Escalation context with Draft: {tier1_draft[:100]}...",
-                response_text=tier2_answer,
-                confidence=0.98,
-                uncertainty_reasons=[],
-                tokens=tier2_tokens,
-                cost_usd=tier2_cost,
-                latency_ms=tier2_latency,
-                model_id=tier2_model_id,
-                pricing_id=tier2_pricing_id,
-            )
-            traces.append(tier2_trace)
-
-            final_answer = tier2_answer
-            served_by_tier = "tier2"
-            served_by_model = tier2_display_name
-
-        # ---------------------------------------------------------------------
-        # STEP 3b: Quality Evaluation (hybrid deterministic + LLM judge)
-        # ---------------------------------------------------------------------
-        quality_eval: Optional[QualityEvaluationResult] = None
-        if settings.quality_evaluation_enabled:
-            try:
-                from app.evaluation.composite import evaluate_quality
-
-                eval_result = await evaluate_quality(
-                    prompt=request.prompt,
-                    response=final_answer,
-                    model_id=tier2_model_id if should_escalate else tier1_model_id,
-                    query_id=query_id,
-                )
-                quality_eval = QualityEvaluationResult(**eval_result)
-
-                # Persist quality evaluation to DB
-                try:
-                    async with async_session() as session:
-                        from app.models.db_models import ModelQualityEvaluation
-                        import json
-                        eval_db = ModelQualityEvaluation(
-                            id=f"qeval_{uuid.uuid4().hex[:10]}",
-                            model_id=tier2_model_id if should_escalate else tier1_model_id,
-                            query_id=query_id,
-                            task_type=eval_result["task_type"],
-                            quality_score=eval_result["quality_score"],
-                            deterministic_score=eval_result.get("deterministic_score"),
-                            llm_judge_score=eval_result.get("llm_judge_score"),
-                            metrics_json=json.dumps(eval_result.get("metrics", {})),
-                        )
-                        session.add(eval_db)
-                        await session.commit()
-                except Exception as e:
-                    print(f"[quality_eval] DB persist failed (non-critical): {e}", file=sys.stderr)
-
-            except Exception as e:
-                print(f"[quality_eval] Evaluation failed (non-critical): {e}", file=sys.stderr)
-                quality_eval = None
-
-        # ---------------------------------------------------------------------
-        # STEP 4c: Quality Recovery Gate
-        # ---------------------------------------------------------------------
-        recovery_result = None
-        if settings.quality_recovery_enabled and quality_eval is not None:
-            try:
-                from app.evaluation.recovery import apply_quality_recovery
-
-                recovery_result = await apply_quality_recovery(
-                    prompt=request.prompt,
-                    current_answer=final_answer,
-                    current_provider=active_provider,
-                    current_model_id=tier2_model_id if should_escalate else tier1_model_id,
-                    current_model_name=served_by_model,
-                    current_tier=served_by_tier,
-                    quality_score=quality_eval.quality_score,
-                    quality_metrics=quality_eval.metrics,
-                )
-
-                if recovery_result.action_taken in ("revise_success", "escalate"):
-                    final_answer = recovery_result.final_answer
-                    served_by_model = recovery_result.recovery_model
-                    traces.append(ModelExecutionTrace(
-                        model_name=recovery_result.recovery_model,
-                        tier=f"recovery_{served_by_tier}",
-                        prompt=f"Quality recovery ({recovery_result.action_taken})",
-                        response_text=recovery_result.final_answer,
-                        confidence=None,
-                        uncertainty_reasons=[],
-                        tokens=recovery_result.recovery_tokens or TokenMetrics(),
-                        cost_usd=recovery_result.recovery_cost_usd,
-                        latency_ms=recovery_result.recovery_latency_ms,
-                        model_id=recovery_result.recovery_model_id,
-                    ))
-
-                # Persist recovery to DB
-                try:
-                    async with async_session() as session:
-                        from app.models.db_models import ModelQualityRecovery
-                        import json
-                        recovery_db = ModelQualityRecovery(
-                            id=f"qrec_{uuid.uuid4().hex[:10]}",
-                            model_id=tier2_model_id if should_escalate else tier1_model_id,
-                            query_id=query_id,
-                            original_quality_score=recovery_result.original_score,
-                            final_quality_score=recovery_result.final_score,
-                            action_taken=recovery_result.action_taken,
-                            revision_attempts=recovery_result.revision_attempts,
-                            recovery_model=recovery_result.recovery_model,
-                            recovery_model_id=recovery_result.recovery_model_id,
-                            recovery_cost_usd=recovery_result.recovery_cost_usd,
-                            recovery_latency_ms=recovery_result.recovery_latency_ms,
-                        )
-                        session.add(recovery_db)
-                        await session.commit()
-                except Exception as e:
-                    print(f"[quality_recovery] DB persist failed: {e}", file=sys.stderr)
-
-            except Exception as e:
-                print(f"[quality_recovery] Recovery failed (non-critical): {e}", file=sys.stderr)
-                recovery_result = None
-
-        # ---------------------------------------------------------------------
-        # STEP 4: Calculate Cost Breakdown & Audit Justification
-        # ---------------------------------------------------------------------
-        cost_breakdown = await CostTracker.calculate_cost_breakdown(
-            provider=active_provider,
-            tier1_tokens=tier1_tokens,
-            tier2_tokens=tier2_tokens,
-            escalation=escalation_event,
-            tier1_model_id=tier1_model_id,
-            tier2_model_id=tier2_model_id,
+        result = await graph.ainvoke(
+            initial_state,
+            config={"configurable": {"thread_id": query_id}},
         )
 
         total_latency_ms = round((time.time() - total_start) * 1000, 2)
-        utc_now = datetime.now(timezone.utc)
+        return _assemble_response(result, total_latency_ms)
 
-        response = ChatResponse(
-            id=query_id,
-            prompt=request.prompt,
-            final_answer=final_answer,
-            served_by_tier=served_by_tier,
-            served_by_model=served_by_model,
-            confidence=tier1_conf,
-            escalation=escalation_event,
-            traces=traces,
-            cost_breakdown=cost_breakdown,
-            total_latency_ms=total_latency_ms,
-            quality_evaluation=quality_eval,
-            quality_recovery=QualityRecoveryResult(
-                action_taken=recovery_result.action_taken,
-                original_score=recovery_result.original_score,
-                final_score=recovery_result.final_score,
-                revision_attempts=recovery_result.revision_attempts,
-                recovery_model=recovery_result.recovery_model,
-                recovery_model_id=recovery_result.recovery_model_id,
-                recovery_cost_usd=recovery_result.recovery_cost_usd,
-                recovery_latency_ms=recovery_result.recovery_latency_ms,
-            ) if recovery_result else None,
-            timestamp=utc_now
+
+def _assemble_response(state: dict, total_latency_ms: float) -> ChatResponse:
+    """Convert final LangGraph state into a ChatResponse."""
+    is_escalated = state.get("status") == "escalated" or state.get("escalation_reason") is not None
+    served_by_tier = "tier2" if is_escalated and state.get("tier2_answer") else "tier1"
+    served_by_model = state.get("tier2_model_name") or state.get("tier1_model_name") or ""
+    final_answer = state.get("final_response") or state.get("tier1_draft") or ""
+
+    traces = []
+    for t in state.get("traces", []):
+        traces.append(ModelExecutionTrace(
+            model_name=t.get("model_name", ""),
+            tier=t.get("tier", "tier1"),
+            prompt=t.get("prompt", ""),
+            response_text=t.get("response_text", ""),
+            confidence=t.get("confidence"),
+            uncertainty_reasons=t.get("uncertainty_reasons", []),
+            tokens=TokenMetrics(
+                input_tokens=t.get("tokens", {}).get("input_tokens", 0),
+                output_tokens=t.get("tokens", {}).get("output_tokens", 0),
+                total_tokens=t.get("tokens", {}).get("total_tokens", 0),
+            ),
+            cost_usd=t.get("cost_usd", 0.0),
+            latency_ms=t.get("latency_ms", 0.0),
+            model_id=t.get("model_id"),
+            pricing_id=t.get("pricing_id"),
+            pareto_score=t.get("pareto_score"),
+            pareto_rank=t.get("pareto_rank"),
+        ))
+
+    cb = state.get("cost_breakdown", {})
+    cost_breakdown_obj = type("CostBreakdown", (), {
+        "tier1_cost_usd": cb.get("tier1_cost_usd", 0.0),
+        "tier2_cost_usd": cb.get("tier2_cost_usd", 0.0),
+        "total_cost_usd": cb.get("total_cost_usd", 0.0),
+        "baseline_sonnet_cost_usd": cb.get("baseline_sonnet_cost_usd", 0.0),
+        "savings_usd": cb.get("savings_usd", 0.0),
+        "savings_percent": cb.get("savings_percent", 0.0),
+        "currency": cb.get("currency", "USD"),
+        "spend_justification": cb.get("spend_justification", ""),
+        "tier1_pricing_id": cb.get("tier1_pricing_id"),
+        "tier2_pricing_id": cb.get("tier2_pricing_id"),
+    })()
+
+    from app.models.schemas import CostBreakdown
+    cost_breakdown = CostBreakdown(
+        tier1_cost_usd=cb.get("tier1_cost_usd", 0.0),
+        tier2_cost_usd=cb.get("tier2_cost_usd", 0.0),
+        total_cost_usd=cb.get("total_cost_usd", 0.0),
+        baseline_sonnet_cost_usd=cb.get("baseline_sonnet_cost_usd", 0.0),
+        savings_usd=cb.get("savings_usd", 0.0),
+        savings_percent=cb.get("savings_percent", 0.0),
+        currency=cb.get("currency", "USD"),
+        spend_justification=cb.get("spend_justification", ""),
+        tier1_pricing_id=cb.get("tier1_pricing_id"),
+        tier2_pricing_id=cb.get("tier2_pricing_id"),
+    )
+
+    escalation = EscalationEvent(
+        escalated=is_escalated,
+        reason=state.get("escalation_reason"),
+        explanation=_build_escalation_explanation(state),
+        trigger_confidence=state.get("tier1_confidence"),
+        threshold=state.get("confidence_threshold"),
+    )
+
+    quality_eval = None
+    if state.get("evaluation"):
+        qe = state["evaluation"]
+        quality_eval = QualityEvaluationResult(
+            task_type=qe.get("task_type", "unknown"),
+            quality_score=qe.get("quality_score", 0.0),
+            deterministic_score=qe.get("deterministic_score"),
+            llm_judge_score=qe.get("llm_judge_score"),
+            metrics=qe.get("metrics", {}),
         )
 
-        # ---------------------------------------------------------------------
-        # STEP 5: Persist Audit History
-        # ---------------------------------------------------------------------
-        history_item = QueryHistoryItem(
-            id=query_id,
-            timestamp=utc_now.strftime("%Y-%m-%d %H:%M:%S UTC"),
-            prompt=request.prompt,
-            final_answer=final_answer,
-            provider=active_provider,
-            served_by_model=served_by_model,
-            served_by_tier=served_by_tier,
-            confidence=tier1_conf,
-            escalated=should_escalate,
-            escalation_reason=escalation_reason,
-            total_tokens=tier1_tokens.total_tokens + tier2_tokens.total_tokens,
-            total_cost_usd=cost_breakdown.total_cost_usd,
-            savings_usd=cost_breakdown.savings_usd,
-            spend_justification=cost_breakdown.spend_justification,
-            tier1_pricing_id=cost_breakdown.tier1_pricing_id,
-            tier2_pricing_id=cost_breakdown.tier2_pricing_id,
+    quality_recovery = None
+    qr = state.get("quality_recovery")
+    if qr:
+        quality_recovery = QualityRecoveryResult(
+            action_taken=qr.get("action_taken", "accept"),
+            original_score=qr.get("original_score", 0.0),
+            final_score=qr.get("final_score"),
+            revision_attempts=qr.get("revision_attempts", 0),
+            recovery_model=qr.get("recovery_model"),
+            recovery_model_id=qr.get("recovery_model_id"),
+            recovery_cost_usd=qr.get("recovery_cost_usd", 0.0),
+            recovery_latency_ms=qr.get("recovery_latency_ms", 0.0),
         )
-        history_store.add(history_item)
 
-        return response
+    return ChatResponse(
+        id=state.get("request_id", ""),
+        prompt=state.get("user_input", ""),
+        final_answer=final_answer,
+        served_by_tier=served_by_tier,
+        served_by_model=served_by_model,
+        confidence=state.get("tier1_confidence", 0.0),
+        escalation=escalation,
+        traces=traces,
+        cost_breakdown=cost_breakdown,
+        total_latency_ms=total_latency_ms,
+        quality_evaluation=quality_eval,
+        quality_recovery=quality_recovery,
+        key_source=state.get("key_source"),
+        timestamp=datetime.now(timezone.utc),
+    )
+
+
+def _build_escalation_explanation(state: dict) -> str:
+    """Build a human-readable escalation explanation."""
+    reason = state.get("escalation_reason")
+    if not reason:
+        return ""
+
+    conf = state.get("tier1_confidence", 0.0)
+    threshold = state.get("confidence_threshold", 0.75)
+    uncertainty = state.get("tier1_uncertainty_reasons", [])
+
+    if reason == "LOW_CONFIDENCE":
+        reasons_str = "; ".join(uncertainty) if uncertainty else "Model expressed uncertainty"
+        return f"Confidence {conf:.2f} is below threshold {threshold:.2f}. Identified flags: {reasons_str}"
+    elif reason == "LOW_QUALITY":
+        qs = state.get("quality_score", 0.0)
+        return f"Quality score {qs:.2f} fell below the revision threshold. Upgrading to frontier model."
+    elif reason == "FORCED_OVERRIDE":
+        return "Manual test override forced Tier 2 escalation."
+    elif reason == "MODEL_TIMEOUT":
+        return "Tier 1 model timed out. Falling back to Tier 2."
+    elif reason == "MODEL_RATE_LIMIT":
+        return "Tier 1 model rate limited. Falling back to Tier 2."
+    elif reason == "PROVIDER_ERROR":
+        return "Tier 1 provider returned an error. Falling back to Tier 2."
+    elif reason == "QUALITY_REVISION_FAILED":
+        return "Quality revision attempts exhausted without meeting threshold."
+    else:
+        return f"Escalation triggered: {reason}"

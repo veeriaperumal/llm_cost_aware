@@ -18,10 +18,57 @@ except ImportError:
 
 
 class LLMProviderClient:
-    """Multi-provider client executing Tier 1 and Tier 2 LLM inference dynamically with confidence extraction."""
+    """Multi-provider client executing Tier 1 and Tier 2 LLM inference dynamically with user-level credentials and confidence extraction."""
 
     @staticmethod
-    async def get_model_for_provider(provider: str, tier: str):
+    async def resolve_provider_key(provider: str, user_id: Optional[str] = None) -> Optional[str]:
+        """Resolves active API key for a provider: User DB Key > Server Settings > None."""
+        p = (provider or "").lower().strip()
+        if p == "mock":
+            print(f"[KEY_RESOLVE] provider={p} → mock (no key needed)")
+            return None
+        
+        # 1. Check user key from database if user_id provided
+        if user_id:
+            try:
+                from app.services.key_service import KeyService
+                user_key = await KeyService.get_decrypted_user_key(user_id, p)
+                if user_key:
+                    hint = user_key[:6] + "..." + user_key[-4:] if len(user_key) > 10 else user_key
+                    print(f"[KEY_RESOLVE] provider={p} user_id={user_id} → USER_DB_KEY (hint={hint})")
+                    return user_key
+                else:
+                    print(f"[KEY_RESOLVE] provider={p} user_id={user_id} → no user key in DB, falling back to server env")
+            except Exception as e:
+                print(f"[KEY_RESOLVE] provider={p} user_id={user_id} → DB lookup failed: {e}, falling back to server env")
+
+        # 2. Fallback to server environment keys
+        if p == "gemini" and bool(settings.gemini_api_key):
+            hint = settings.gemini_api_key[:6] + "..." + settings.gemini_api_key[-4:]
+            print(f"[KEY_RESOLVE] provider={p} → SERVER_ENV_KEY (hint={hint})")
+            return settings.gemini_api_key
+        if p == "groq" and bool(settings.groq_api_key):
+            hint = settings.groq_api_key[:6] + "..." + settings.groq_api_key[-4:]
+            print(f"[KEY_RESOLVE] provider={p} → SERVER_ENV_KEY (hint={hint})")
+            return settings.groq_api_key
+        if p == "openai" and bool(settings.openai_api_key):
+            hint = settings.openai_api_key[:6] + "..." + settings.openai_api_key[-4:]
+            print(f"[KEY_RESOLVE] provider={p} → SERVER_ENV_KEY (hint={hint})")
+            return settings.openai_api_key
+        if p in ["anthropic", "claude"] and bool(settings.anthropic_api_key):
+            hint = settings.anthropic_api_key[:6] + "..." + settings.anthropic_api_key[-4:]
+            print(f"[KEY_RESOLVE] provider={p} → SERVER_ENV_KEY (hint={hint})")
+            return settings.anthropic_api_key
+        if p == "mistral" and bool(settings.mistral_api_key):
+            hint = settings.mistral_api_key[:6] + "..." + settings.mistral_api_key[-4:]
+            print(f"[KEY_RESOLVE] provider={p} → SERVER_ENV_KEY (hint={hint})")
+            return settings.mistral_api_key
+
+        print(f"[KEY_RESOLVE] provider={p} user_id={user_id} → NO_KEY_FOUND (will use mock)")
+        return None
+
+    @staticmethod
+    async def get_model_for_provider(provider: str, tier: str, user_id: Optional[str] = None):
         """Query DB for model metadata using Pareto selection.
         Returns (model_id, model_name, display_name, provider_name) or None.
         """
@@ -30,6 +77,10 @@ class LLMProviderClient:
             from app.database import async_session
             from app.models.db_models import LLMModel, ModelPricing as DBModelPricing
             from app.graph.pareto import ModelCandidate, select_best
+            from app.services.key_service import KeyService
+
+            # Fetch active user keys if user_id given
+            user_keys = await KeyService.get_all_decrypted_user_keys(user_id) if user_id else {}
 
             async with async_session() as session:
                 stmt = (
@@ -50,6 +101,9 @@ class LLMProviderClient:
                 candidates = []
                 for model, pricing in rows:
                     cost = pricing.input_price_per_million * 0.75 + pricing.output_price_per_million * 0.25
+                    p_name = model.provider_name.lower().strip()
+                    has_key = bool(user_keys.get(p_name)) or LLMProviderClient._provider_has_api_key(p_name)
+                    
                     candidates.append(ModelCandidate(
                         model_id=model.id,
                         provider_name=model.provider_name,
@@ -58,7 +112,7 @@ class LLMProviderClient:
                         quality=model.base_quality_score,
                         latency_ms=model.expected_latency_ms,
                         cost_per_million=cost,
-                        has_api_key=LLMProviderClient._provider_has_api_key(model.provider_name),
+                        has_api_key=has_key,
                     ))
 
                 # If specific provider requested and has a key, use its models
@@ -67,7 +121,7 @@ class LLMProviderClient:
                     prov_candidates = [c for c in candidates if c.provider_name.lower() == "mock"]
                     if prov_candidates:
                         candidates = prov_candidates
-                elif req_clean and req_clean not in ["auto"] and LLMProviderClient._provider_has_api_key(req_clean):
+                elif req_clean and req_clean not in ["auto"]:
                     prov_candidates = [c for c in candidates if c.provider_name.lower() == req_clean]
                     if prov_candidates:
                         candidates = prov_candidates
@@ -95,7 +149,7 @@ class LLMProviderClient:
             return True
         if p == "openai" and bool(settings.openai_api_key):
             return True
-        if p == "anthropic" and bool(settings.anthropic_api_key):
+        if p in ["anthropic", "claude"] and bool(settings.anthropic_api_key):
             return True
         if p == "mistral" and bool(settings.mistral_api_key):
             return True
@@ -106,44 +160,46 @@ class LLMProviderClient:
         return max(1, len(text.split()) * 4 // 3)
 
     @staticmethod
-    def _get_active_provider(requested_provider: str) -> str:
+    async def _get_active_provider_and_key(requested_provider: str, user_id: Optional[str] = None) -> Tuple[str, Optional[str]]:
         req = (requested_provider or "").lower().strip()
         if req == "mock":
-            return "mock"
-        if req and req != "auto" and LLMProviderClient._provider_has_api_key(req):
-            return req
-        # Auto-detect available live provider
-        if settings.gemini_api_key:
-            return "gemini"
-        if settings.groq_api_key:
-            return "groq"
-        if settings.openai_api_key:
-            return "openai"
-        if settings.anthropic_api_key:
-            return "anthropic"
-        if settings.mistral_api_key:
-            return "mistral"
-        return "mock"
+            return "mock", None
+
+        # If specific provider requested:
+        if req and req != "auto":
+            key = await LLMProviderClient.resolve_provider_key(req, user_id)
+            if key:
+                return req, key
+            # If user explicitly asked for a provider with no key, return it anyway so it will attempt / fall back
+            return req, None
+
+        # Auto-detect available provider in priority order: Gemini -> Groq -> OpenAI -> Anthropic -> Mistral
+        for prov in ["gemini", "groq", "openai", "anthropic", "mistral"]:
+            key = await LLMProviderClient.resolve_provider_key(prov, user_id)
+            if key:
+                return prov, key
+
+        return "mock", None
 
     @staticmethod
-    async def execute_tier1(provider: str, prompt: str) -> Tuple[str, float, List[str], TokenMetrics, float]:
+    async def execute_tier1(provider: str, prompt: str, user_id: Optional[str] = None) -> Tuple[str, float, List[str], TokenMetrics, float]:
         """
         Executes Tier 1 (Fast & Cheap model).
         Returns: (draft_answer, confidence_score, uncertainty_reasons, tokens, latency_ms)
         """
         start_time = time.time()
-        active_provider = LLMProviderClient._get_active_provider(provider)
+        active_provider, api_key = await LLMProviderClient._get_active_provider_and_key(provider, user_id)
 
-        if active_provider == "gemini" and settings.gemini_api_key:
-            draft, conf, reasons, in_tok, out_tok = await LLMProviderClient._call_gemini_tier1(prompt)
-        elif active_provider == "groq" and settings.groq_api_key:
-            draft, conf, reasons, in_tok, out_tok = await LLMProviderClient._call_groq_tier1(prompt)
-        elif active_provider == "mistral" and settings.mistral_api_key:
-            draft, conf, reasons, in_tok, out_tok = await LLMProviderClient._call_mistral_tier1(prompt)
-        elif active_provider == "anthropic" and settings.anthropic_api_key:
-            draft, conf, reasons, in_tok, out_tok = await LLMProviderClient._call_anthropic_tier1(prompt)
-        elif active_provider == "openai" and settings.openai_api_key:
-            draft, conf, reasons, in_tok, out_tok = await LLMProviderClient._call_openai_tier1(prompt)
+        if active_provider == "gemini" and api_key:
+            draft, conf, reasons, in_tok, out_tok = await LLMProviderClient._call_gemini_tier1(prompt, api_key)
+        elif active_provider == "groq" and api_key:
+            draft, conf, reasons, in_tok, out_tok = await LLMProviderClient._call_groq_tier1(prompt, api_key)
+        elif active_provider == "mistral" and api_key:
+            draft, conf, reasons, in_tok, out_tok = await LLMProviderClient._call_mistral_tier1(prompt, api_key)
+        elif active_provider in ["anthropic", "claude"] and api_key:
+            draft, conf, reasons, in_tok, out_tok = await LLMProviderClient._call_anthropic_tier1(prompt, api_key)
+        elif active_provider == "openai" and api_key:
+            draft, conf, reasons, in_tok, out_tok = await LLMProviderClient._call_openai_tier1(prompt, api_key)
         else:
             draft, conf, reasons, in_tok, out_tok = LLMProviderClient._simulate_tier1(prompt)
 
@@ -157,25 +213,26 @@ class LLMProviderClient:
         prompt: str,
         tier1_draft: str,
         escalation_reason: str,
-        uncertainty_reasons: List[str]
+        uncertainty_reasons: List[str],
+        user_id: Optional[str] = None
     ) -> Tuple[str, TokenMetrics, float]:
         """
         Executes Tier 2 (Frontier / High-capacity model) given full context of Tier 1's draft and escalation reason.
         Returns: (final_answer, tokens, latency_ms)
         """
         start_time = time.time()
-        active_provider = LLMProviderClient._get_active_provider(provider)
+        active_provider, api_key = await LLMProviderClient._get_active_provider_and_key(provider, user_id)
 
-        if active_provider == "gemini" and settings.gemini_api_key:
-            answer, in_tok, out_tok = await LLMProviderClient._call_gemini_tier2(prompt, tier1_draft, escalation_reason, uncertainty_reasons)
-        elif active_provider == "groq" and settings.groq_api_key:
-            answer, in_tok, out_tok = await LLMProviderClient._call_groq_tier2(prompt, tier1_draft, escalation_reason, uncertainty_reasons)
-        elif active_provider == "mistral" and settings.mistral_api_key:
-            answer, in_tok, out_tok = await LLMProviderClient._call_mistral_tier2(prompt, tier1_draft, escalation_reason, uncertainty_reasons)
-        elif active_provider == "anthropic" and settings.anthropic_api_key:
-            answer, in_tok, out_tok = await LLMProviderClient._call_anthropic_tier2(prompt, tier1_draft, escalation_reason, uncertainty_reasons)
-        elif active_provider == "openai" and settings.openai_api_key:
-            answer, in_tok, out_tok = await LLMProviderClient._call_openai_tier2(prompt, tier1_draft, escalation_reason, uncertainty_reasons)
+        if active_provider == "gemini" and api_key:
+            answer, in_tok, out_tok = await LLMProviderClient._call_gemini_tier2(prompt, tier1_draft, escalation_reason, uncertainty_reasons, api_key)
+        elif active_provider == "groq" and api_key:
+            answer, in_tok, out_tok = await LLMProviderClient._call_groq_tier2(prompt, tier1_draft, escalation_reason, uncertainty_reasons, api_key)
+        elif active_provider == "mistral" and api_key:
+            answer, in_tok, out_tok = await LLMProviderClient._call_mistral_tier2(prompt, tier1_draft, escalation_reason, uncertainty_reasons, api_key)
+        elif active_provider in ["anthropic", "claude"] and api_key:
+            answer, in_tok, out_tok = await LLMProviderClient._call_anthropic_tier2(prompt, tier1_draft, escalation_reason, uncertainty_reasons, api_key)
+        elif active_provider == "openai" and api_key:
+            answer, in_tok, out_tok = await LLMProviderClient._call_openai_tier2(prompt, tier1_draft, escalation_reason, uncertainty_reasons, api_key)
         else:
             answer, in_tok, out_tok = LLMProviderClient._simulate_tier2(prompt, tier1_draft, escalation_reason)
 
@@ -248,7 +305,7 @@ class LLMProviderClient:
         return draft, conf, reasons
 
     @staticmethod
-    async def _call_gemini_tier1(prompt: str) -> Tuple[str, float, List[str], int, int]:
+    async def _call_gemini_tier1(prompt: str, api_key: str) -> Tuple[str, float, List[str], int, int]:
         candidate_models = [
             "models/gemini-flash-lite-latest",
             "models/gemini-flash-latest",
@@ -266,7 +323,7 @@ class LLMProviderClient:
         
         async with httpx.AsyncClient(timeout=40.0) as client:
             for model_name in candidate_models:
-                url = f"https://generativelanguage.googleapis.com/v1beta/{model_name}:generateContent?key={settings.gemini_api_key}"
+                url = f"https://generativelanguage.googleapis.com/v1beta/{model_name}:generateContent?key={api_key}"
                 try:
                     resp = await client.post(url, json=payload)
                     if resp.status_code == 200:
@@ -280,12 +337,10 @@ class LLMProviderClient:
                 except Exception:
                     continue
 
-        if settings.groq_api_key:
-            return await LLMProviderClient._call_groq_tier1(prompt)
         return LLMProviderClient._simulate_tier1(prompt)
 
     @staticmethod
-    async def _call_gemini_tier2(prompt: str, tier1_draft: str, reason: str, uncertainty: List[str]) -> Tuple[str, int, int]:
+    async def _call_gemini_tier2(prompt: str, tier1_draft: str, reason: str, uncertainty: List[str], api_key: str) -> Tuple[str, int, int]:
         candidate_models = [
             "models/gemini-flash-latest",
             "models/gemini-flash-lite-latest",
@@ -302,7 +357,7 @@ class LLMProviderClient:
         
         async with httpx.AsyncClient(timeout=50.0) as client:
             for model_name in candidate_models:
-                url = f"https://generativelanguage.googleapis.com/v1beta/{model_name}:generateContent?key={settings.gemini_api_key}"
+                url = f"https://generativelanguage.googleapis.com/v1beta/{model_name}:generateContent?key={api_key}"
                 try:
                     resp = await client.post(url, json=payload)
                     if resp.status_code == 200:
@@ -315,20 +370,18 @@ class LLMProviderClient:
                 except Exception:
                     continue
 
-        if settings.groq_api_key:
-            return await LLMProviderClient._call_groq_tier2(prompt, tier1_draft, reason, uncertainty)
         return LLMProviderClient._simulate_tier2(prompt, tier1_draft, reason)
 
     @staticmethod
-    async def _call_groq_tier1(prompt: str) -> Tuple[str, float, List[str], int, int]:
-        candidate_models = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b"]
+    async def _call_groq_tier1(prompt: str, api_key: str) -> Tuple[str, float, List[str], int, int]:
+        candidate_models = ["llama-3.1-8b-instant", "qwen-2.5-32b", "gemma2-9b-it"]
         system_prompt = (
             "You are a fast Tier-1 routing assistant. Answer the user prompt directly in full detail. "
             "Then evaluate your self-confidence from 0.00 to 1.00 on whether your answer is completely authoritative. "
             "For complex multi-step architecture, system design, or distributed systems questions, assign confidence <= 0.65. "
             "Respond strictly in JSON format with keys: 'answer' (string), 'confidence' (float between 0.0 and 1.0), and 'uncertainty_reasons' (list of strings)."
         )
-        headers = {"Authorization": f"Bearer {settings.groq_api_key}", "Content-Type": "application/json"}
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         
         async with httpx.AsyncClient(timeout=30.0) as client:
             for model_name in candidate_models:
@@ -352,13 +405,11 @@ class LLMProviderClient:
                 except Exception:
                     continue
 
-        if settings.gemini_api_key:
-            return await LLMProviderClient._call_gemini_tier1(prompt)
         return LLMProviderClient._simulate_tier1(prompt)
 
     @staticmethod
-    async def _call_groq_tier2(prompt: str, tier1_draft: str, reason: str, uncertainty: List[str]) -> Tuple[str, int, int]:
-        candidate_models = ["openai/gpt-oss-120b", "qwen/qwen3.8-27b"]
+    async def _call_groq_tier2(prompt: str, tier1_draft: str, reason: str, uncertainty: List[str], api_key: str) -> Tuple[str, int, int]:
+        candidate_models = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
         prompt_content = (
             f"You are a Senior Frontier AI Model (Tier 2). Synthesize an authoritative, exhaustive, and rigorously verified technical response.\n\n"
             f"Question: {prompt}\n\n"
@@ -367,7 +418,7 @@ class LLMProviderClient:
             f"Key Areas to Address: {', '.join(uncertainty) if uncertainty else 'Provide rigorous deep architectural analysis.'}\n\n"
             f"Please synthesize the complete, detailed final response with clean markdown formatting, architecture breakdowns, or code."
         )
-        headers = {"Authorization": f"Bearer {settings.groq_api_key}", "Content-Type": "application/json"}
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         
         async with httpx.AsyncClient(timeout=45.0) as client:
             for model_name in candidate_models:
@@ -386,206 +437,174 @@ class LLMProviderClient:
                 except Exception:
                     continue
 
-        if settings.gemini_api_key:
-            return await LLMProviderClient._call_gemini_tier2(prompt, tier1_draft, reason, uncertainty)
         return LLMProviderClient._simulate_tier2(prompt, tier1_draft, reason)
 
     @staticmethod
-    async def _call_mistral_tier1(prompt: str) -> Tuple[str, float, List[str], int, int]:
-        if settings.mistral_api_key:
-            try:
-                url = "https://api.mistral.ai/v1/chat/completions"
-                headers = {"Authorization": f"Bearer {settings.mistral_api_key}", "Content-Type": "application/json"}
-                payload = {
-                    "model": "mistral-small-latest",
-                    "messages": [
-                        {"role": "system", "content": "Return JSON with keys: answer (string), confidence (0-1 float), uncertainty_reasons (list)."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    "response_format": {"type": "json_object"}
-                }
-                async with httpx.AsyncClient(timeout=30.0) as client:
-                    resp = await client.post(url, headers=headers, json=payload)
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        content = data["choices"][0]["message"]["content"]
-                        parsed = json.loads(content)
-                        in_tok = data.get("usage", {}).get("prompt_tokens", 100)
-                        out_tok = data.get("usage", {}).get("completion_tokens", 80)
-                        return parsed.get("answer", content), float(parsed.get("confidence", 0.70)), parsed.get("uncertainty_reasons", []), in_tok, out_tok
-            except Exception:
-                pass
-        if settings.gemini_api_key:
-            return await LLMProviderClient._call_gemini_tier1(prompt)
-        if settings.groq_api_key:
-            return await LLMProviderClient._call_groq_tier1(prompt)
+    async def _call_mistral_tier1(prompt: str, api_key: str) -> Tuple[str, float, List[str], int, int]:
+        try:
+            url = "https://api.mistral.ai/v1/chat/completions"
+            headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+            payload = {
+                "model": "mistral-small-latest",
+                "messages": [
+                    {"role": "system", "content": "Return JSON with keys: answer (string), confidence (0-1 float), uncertainty_reasons (list)."},
+                    {"role": "user", "content": prompt}
+                ],
+                "response_format": {"type": "json_object"}
+            }
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(url, headers=headers, json=payload)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    content = data["choices"][0]["message"]["content"]
+                    parsed = json.loads(content)
+                    in_tok = data.get("usage", {}).get("prompt_tokens", 100)
+                    out_tok = data.get("usage", {}).get("completion_tokens", 80)
+                    return parsed.get("answer", content), float(parsed.get("confidence", 0.70)), parsed.get("uncertainty_reasons", []), in_tok, out_tok
+        except Exception:
+            pass
         return LLMProviderClient._simulate_tier1(prompt)
 
     @staticmethod
-    async def _call_mistral_tier2(prompt: str, tier1_draft: str, reason: str, uncertainty: List[str]) -> Tuple[str, int, int]:
-        if settings.mistral_api_key:
-            try:
-                url = "https://api.mistral.ai/v1/chat/completions"
-                headers = {"Authorization": f"Bearer {settings.mistral_api_key}", "Content-Type": "application/json"}
-                payload = {
-                    "model": "mistral-large-latest",
-                    "messages": [{"role": "user", "content": f"Question: {prompt}\nTier 1 Draft: {tier1_draft}\nEscalate Reason: {reason}\nProvide complete final answer."}]
-                }
-                async with httpx.AsyncClient(timeout=45.0) as client:
-                    resp = await client.post(url, headers=headers, json=payload)
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        answer = data["choices"][0]["message"]["content"]
-                        in_tok = data.get("usage", {}).get("prompt_tokens", 150)
-                        out_tok = data.get("usage", {}).get("completion_tokens", 250)
-                        return answer, in_tok, out_tok
-            except Exception:
-                pass
-        if settings.gemini_api_key:
-            return await LLMProviderClient._call_gemini_tier2(prompt, tier1_draft, reason, uncertainty)
-        if settings.groq_api_key:
-            return await LLMProviderClient._call_groq_tier2(prompt, tier1_draft, reason, uncertainty)
+    async def _call_mistral_tier2(prompt: str, tier1_draft: str, reason: str, uncertainty: List[str], api_key: str) -> Tuple[str, int, int]:
+        try:
+            url = "https://api.mistral.ai/v1/chat/completions"
+            headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+            payload = {
+                "model": "mistral-large-latest",
+                "messages": [{"role": "user", "content": f"Question: {prompt}\nTier 1 Draft: {tier1_draft}\nEscalate Reason: {reason}\nProvide complete final answer."}]
+            }
+            async with httpx.AsyncClient(timeout=45.0) as client:
+                resp = await client.post(url, headers=headers, json=payload)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    answer = data["choices"][0]["message"]["content"]
+                    in_tok = data.get("usage", {}).get("prompt_tokens", 150)
+                    out_tok = data.get("usage", {}).get("completion_tokens", 250)
+                    return answer, in_tok, out_tok
+        except Exception:
+            pass
         return LLMProviderClient._simulate_tier2(prompt, tier1_draft, reason)
 
     @staticmethod
-    async def _call_anthropic_tier1(prompt: str) -> Tuple[str, float, List[str], int, int]:
-        if settings.anthropic_api_key:
-            try:
-                url = "https://api.anthropic.com/v1/messages"
-                headers = {
-                    "x-api-key": settings.anthropic_api_key,
-                    "anthropic-version": "2023-06-01",
-                    "content-type": "application/json"
-                }
-                system_prompt = (
-                    "You are Claude 3.5 Haiku. Answer the user question and evaluate your confidence score (0.00 to 1.00). "
-                    "Output JSON with keys: answer (string), confidence (number 0.0 to 1.0), uncertainty_reasons (list of strings)."
-                )
-                payload = {
-                    "model": "claude-3-5-haiku-20241022",
-                    "max_tokens": 1024,
-                    "system": system_prompt,
-                    "messages": [{"role": "user", "content": prompt}]
-                }
-                async with httpx.AsyncClient(timeout=30.0) as client:
-                    resp = await client.post(url, headers=headers, json=payload)
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        raw_text = data["content"][0]["text"]
-                        match = re.search(r"\{.*\}", raw_text, re.DOTALL)
-                        if match:
-                            parsed = json.loads(match.group(0))
-                            draft = parsed.get("answer", raw_text)
-                            conf = float(parsed.get("confidence", 0.70))
-                            reasons = parsed.get("uncertainty_reasons", [])
-                        else:
-                            draft = raw_text
-                            conf = 0.75
-                            reasons = []
-                        usage = data.get("usage", {})
-                        in_tok = usage.get("input_tokens", 100)
-                        out_tok = usage.get("output_tokens", 80)
-                        return draft, conf, reasons, in_tok, out_tok
-            except Exception:
-                pass
-        if settings.gemini_api_key:
-            return await LLMProviderClient._call_gemini_tier1(prompt)
-        if settings.groq_api_key:
-            return await LLMProviderClient._call_groq_tier1(prompt)
+    async def _call_anthropic_tier1(prompt: str, api_key: str) -> Tuple[str, float, List[str], int, int]:
+        try:
+            url = "https://api.anthropic.com/v1/messages"
+            headers = {
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json"
+            }
+            system_prompt = (
+                "You are Claude 3.5 Haiku. Answer the user question and evaluate your confidence score (0.00 to 1.00). "
+                "Output JSON with keys: answer (string), confidence (number 0.0 to 1.0), uncertainty_reasons (list of strings)."
+            )
+            payload = {
+                "model": "claude-3-5-haiku-20241022",
+                "max_tokens": 1024,
+                "system": system_prompt,
+                "messages": [{"role": "user", "content": prompt}]
+            }
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(url, headers=headers, json=payload)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    raw_text = data["content"][0]["text"]
+                    match = re.search(r"\{.*\}", raw_text, re.DOTALL)
+                    if match:
+                        parsed = json.loads(match.group(0))
+                        draft = parsed.get("answer", raw_text)
+                        conf = float(parsed.get("confidence", 0.70))
+                        reasons = parsed.get("uncertainty_reasons", [])
+                    else:
+                        draft = raw_text
+                        conf = 0.75
+                        reasons = []
+                    usage = data.get("usage", {})
+                    in_tok = usage.get("input_tokens", 100)
+                    out_tok = usage.get("output_tokens", 80)
+                    return draft, conf, reasons, in_tok, out_tok
+        except Exception:
+            pass
         return LLMProviderClient._simulate_tier1(prompt)
 
     @staticmethod
-    async def _call_anthropic_tier2(prompt: str, tier1_draft: str, reason: str, uncertainty: List[str]) -> Tuple[str, int, int]:
-        if settings.anthropic_api_key:
-            try:
-                url = "https://api.anthropic.com/v1/messages"
-                headers = {
-                    "x-api-key": settings.anthropic_api_key,
-                    "anthropic-version": "2023-06-01",
-                    "content-type": "application/json"
-                }
-                system_prompt = "You are Claude 3.5 Sonnet. Review the user prompt, the Haiku preliminary draft, and escalation reasons, then synthesize the comprehensive final answer."
-                user_message = f"User Question: {prompt}\n\nHaiku Draft: {tier1_draft}\nEscalation Reason: {reason}\nUncertainty: {uncertainty}"
-                payload = {
-                    "model": "claude-3-5-sonnet-20241022",
-                    "max_tokens": 2048,
-                    "system": system_prompt,
-                    "messages": [{"role": "user", "content": user_message}]
-                }
-                async with httpx.AsyncClient(timeout=45.0) as client:
-                    resp = await client.post(url, headers=headers, json=payload)
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        answer = data["content"][0]["text"]
-                        usage = data.get("usage", {})
-                        in_tok = usage.get("input_tokens", 150)
-                        out_tok = usage.get("output_tokens", 300)
-                        return answer, in_tok, out_tok
-            except Exception:
-                pass
-        if settings.gemini_api_key:
-            return await LLMProviderClient._call_gemini_tier2(prompt, tier1_draft, reason, uncertainty)
-        if settings.groq_api_key:
-            return await LLMProviderClient._call_groq_tier2(prompt, tier1_draft, reason, uncertainty)
+    async def _call_anthropic_tier2(prompt: str, tier1_draft: str, reason: str, uncertainty: List[str], api_key: str) -> Tuple[str, int, int]:
+        try:
+            url = "https://api.anthropic.com/v1/messages"
+            headers = {
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json"
+            }
+            system_prompt = "You are Claude 3.5 Sonnet. Review the user prompt, the Haiku preliminary draft, and escalation reasons, then synthesize the comprehensive final answer."
+            user_message = f"User Question: {prompt}\n\nHaiku Draft: {tier1_draft}\nEscalation Reason: {reason}\nUncertainty: {uncertainty}"
+            payload = {
+                "model": "claude-3-5-sonnet-20241022",
+                "max_tokens": 2048,
+                "system": system_prompt,
+                "messages": [{"role": "user", "content": user_message}]
+            }
+            async with httpx.AsyncClient(timeout=45.0) as client:
+                resp = await client.post(url, headers=headers, json=payload)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    answer = data["content"][0]["text"]
+                    usage = data.get("usage", {})
+                    in_tok = usage.get("input_tokens", 150)
+                    out_tok = usage.get("output_tokens", 300)
+                    return answer, in_tok, out_tok
+        except Exception:
+            pass
         return LLMProviderClient._simulate_tier2(prompt, tier1_draft, reason)
 
     @staticmethod
-    async def _call_openai_tier1(prompt: str) -> Tuple[str, float, List[str], int, int]:
-        if settings.openai_api_key:
-            try:
-                url = "https://api.openai.com/v1/chat/completions"
-                headers = {"Authorization": f"Bearer {settings.openai_api_key}", "Content-Type": "application/json"}
-                payload = {
-                    "model": "gpt-4o-mini",
-                    "messages": [
-                        {"role": "system", "content": "Answer the question and provide confidence (0.0 to 1.0). Return JSON: {\"answer\": string, \"confidence\": float, \"uncertainty_reasons\": [string]}"},
-                        {"role": "user", "content": prompt}
-                    ],
-                    "response_format": {"type": "json_object"}
-                }
-                async with httpx.AsyncClient(timeout=15.0) as client:
-                    resp = await client.post(url, headers=headers, json=payload)
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        content = data["choices"][0]["message"]["content"]
-                        parsed = json.loads(content)
-                        in_tok = data.get("usage", {}).get("prompt_tokens", 100)
-                        out_tok = data.get("usage", {}).get("completion_tokens", 80)
-                        return parsed.get("answer", content), float(parsed.get("confidence", 0.70)), parsed.get("uncertainty_reasons", []), in_tok, out_tok
-            except Exception:
-                pass
-        if settings.gemini_api_key:
-            return await LLMProviderClient._call_gemini_tier1(prompt)
-        if settings.groq_api_key:
-            return await LLMProviderClient._call_groq_tier1(prompt)
+    async def _call_openai_tier1(prompt: str, api_key: str) -> Tuple[str, float, List[str], int, int]:
+        try:
+            url = "https://api.openai.com/v1/chat/completions"
+            headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+            payload = {
+                "model": "gpt-4o-mini",
+                "messages": [
+                    {"role": "system", "content": "Answer the question and provide confidence (0.0 to 1.0). Return JSON: {\"answer\": string, \"confidence\": float, \"uncertainty_reasons\": [string]}"},
+                    {"role": "user", "content": prompt}
+                ],
+                "response_format": {"type": "json_object"}
+            }
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                resp = await client.post(url, headers=headers, json=payload)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    content = data["choices"][0]["message"]["content"]
+                    parsed = json.loads(content)
+                    in_tok = data.get("usage", {}).get("prompt_tokens", 100)
+                    out_tok = data.get("usage", {}).get("completion_tokens", 80)
+                    return parsed.get("answer", content), float(parsed.get("confidence", 0.70)), parsed.get("uncertainty_reasons", []), in_tok, out_tok
+        except Exception:
+            pass
         return LLMProviderClient._simulate_tier1(prompt)
 
     @staticmethod
-    async def _call_openai_tier2(prompt: str, tier1_draft: str, reason: str, uncertainty: List[str]) -> Tuple[str, int, int]:
-        if settings.openai_api_key:
-            try:
-                url = "https://api.openai.com/v1/chat/completions"
-                headers = {"Authorization": f"Bearer {settings.openai_api_key}", "Content-Type": "application/json"}
-                payload = {
-                    "model": "gpt-4o",
-                    "messages": [
-                        {"role": "user", "content": f"Question: {prompt}\nDraft: {tier1_draft}\nEscalate Reason: {reason}\nProvide verified final answer."}
-                    ]
-                }
-                async with httpx.AsyncClient(timeout=20.0) as client:
-                    resp = await client.post(url, headers=headers, json=payload)
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        answer = data["choices"][0]["message"]["content"]
-                        in_tok = data.get("usage", {}).get("prompt_tokens", 150)
-                        out_tok = data.get("usage", {}).get("completion_tokens", 300)
-                        return answer, in_tok, out_tok
-            except Exception:
-                pass
-        if settings.gemini_api_key:
-            return await LLMProviderClient._call_gemini_tier2(prompt, tier1_draft, reason, uncertainty)
-        if settings.groq_api_key:
-            return await LLMProviderClient._call_groq_tier2(prompt, tier1_draft, reason, uncertainty)
+    async def _call_openai_tier2(prompt: str, tier1_draft: str, reason: str, uncertainty: List[str], api_key: str) -> Tuple[str, int, int]:
+        try:
+            url = "https://api.openai.com/v1/chat/completions"
+            headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+            payload = {
+                "model": "gpt-4o",
+                "messages": [
+                    {"role": "user", "content": f"Question: {prompt}\nDraft: {tier1_draft}\nEscalate Reason: {reason}\nProvide verified final answer."}
+                ]
+            }
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(url, headers=headers, json=payload)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    answer = data["choices"][0]["message"]["content"]
+                    in_tok = data.get("usage", {}).get("prompt_tokens", 150)
+                    out_tok = data.get("usage", {}).get("completion_tokens", 300)
+                    return answer, in_tok, out_tok
+        except Exception:
+            pass
         return LLMProviderClient._simulate_tier2(prompt, tier1_draft, reason)
 
     # =========================================================================
