@@ -13,7 +13,7 @@ try:
     from config.settings import settings
     from app.models.schemas import (
         ChatRequest, ChatResponse, ModelExecutionTrace,
-        EscalationEvent, TokenMetrics, QueryHistoryItem, QualityEvaluationResult,
+        EscalationEvent, TokenMetrics, QueryHistoryItem, QualityEvaluationResult, QualityRecoveryResult,
     )
     from app.router.provider_client import LLMProviderClient
     from app.observability.cost_tracker import CostTracker
@@ -22,7 +22,7 @@ except ImportError:
     from config.settings import settings
     from app.models.schemas import (
         ChatRequest, ChatResponse, ModelExecutionTrace,
-        EscalationEvent, TokenMetrics, QueryHistoryItem, QualityEvaluationResult,
+        EscalationEvent, TokenMetrics, QueryHistoryItem, QualityEvaluationResult, QualityRecoveryResult,
     )
     from app.router.provider_client import LLMProviderClient
     from app.observability.cost_tracker import CostTracker
@@ -205,6 +205,68 @@ class CascadingRouter:
                 quality_eval = None
 
         # ---------------------------------------------------------------------
+        # STEP 4c: Quality Recovery Gate
+        # ---------------------------------------------------------------------
+        recovery_result = None
+        if settings.quality_recovery_enabled and quality_eval is not None:
+            try:
+                from app.evaluation.recovery import apply_quality_recovery
+
+                recovery_result = await apply_quality_recovery(
+                    prompt=request.prompt,
+                    current_answer=final_answer,
+                    current_provider=active_provider,
+                    current_model_id=tier2_model_id if should_escalate else tier1_model_id,
+                    current_model_name=served_by_model,
+                    current_tier=served_by_tier,
+                    quality_score=quality_eval.quality_score,
+                    quality_metrics=quality_eval.metrics,
+                )
+
+                if recovery_result.action_taken in ("revise_success", "escalate"):
+                    final_answer = recovery_result.final_answer
+                    served_by_model = recovery_result.recovery_model
+                    traces.append(ModelExecutionTrace(
+                        model_name=recovery_result.recovery_model,
+                        tier=f"recovery_{served_by_tier}",
+                        prompt=f"Quality recovery ({recovery_result.action_taken})",
+                        response_text=recovery_result.final_answer,
+                        confidence=None,
+                        uncertainty_reasons=[],
+                        tokens=recovery_result.recovery_tokens or TokenMetrics(),
+                        cost_usd=recovery_result.recovery_cost_usd,
+                        latency_ms=recovery_result.recovery_latency_ms,
+                        model_id=recovery_result.recovery_model_id,
+                    ))
+
+                # Persist recovery to DB
+                try:
+                    async with async_session() as session:
+                        from app.models.db_models import ModelQualityRecovery
+                        import json
+                        recovery_db = ModelQualityRecovery(
+                            id=f"qrec_{uuid.uuid4().hex[:10]}",
+                            model_id=tier2_model_id if should_escalate else tier1_model_id,
+                            query_id=query_id,
+                            original_quality_score=recovery_result.original_score,
+                            final_quality_score=recovery_result.final_score,
+                            action_taken=recovery_result.action_taken,
+                            revision_attempts=recovery_result.revision_attempts,
+                            recovery_model=recovery_result.recovery_model,
+                            recovery_model_id=recovery_result.recovery_model_id,
+                            recovery_cost_usd=recovery_result.recovery_cost_usd,
+                            recovery_latency_ms=recovery_result.recovery_latency_ms,
+                        )
+                        session.add(recovery_db)
+                        await session.commit()
+                except Exception as e:
+                    print(f"[quality_recovery] DB persist failed: {e}", file=sys.stderr)
+
+            except Exception as e:
+                print(f"[quality_recovery] Recovery failed (non-critical): {e}", file=sys.stderr)
+                recovery_result = None
+
+        # ---------------------------------------------------------------------
         # STEP 4: Calculate Cost Breakdown & Audit Justification
         # ---------------------------------------------------------------------
         cost_breakdown = await CostTracker.calculate_cost_breakdown(
@@ -231,6 +293,16 @@ class CascadingRouter:
             cost_breakdown=cost_breakdown,
             total_latency_ms=total_latency_ms,
             quality_evaluation=quality_eval,
+            quality_recovery=QualityRecoveryResult(
+                action_taken=recovery_result.action_taken,
+                original_score=recovery_result.original_score,
+                final_score=recovery_result.final_score,
+                revision_attempts=recovery_result.revision_attempts,
+                recovery_model=recovery_result.recovery_model,
+                recovery_model_id=recovery_result.recovery_model_id,
+                recovery_cost_usd=recovery_result.recovery_cost_usd,
+                recovery_latency_ms=recovery_result.recovery_latency_ms,
+            ) if recovery_result else None,
             timestamp=utc_now
         )
 

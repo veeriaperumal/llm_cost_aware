@@ -65,3 +65,20 @@ class ModelQualityEvaluation(Base):
     evaluated_at = Column(DateTime(timezone=True), default=_now, nullable=False)
 
     model = relationship("LLMModel", back_populates="evaluations")
+
+
+class ModelQualityRecovery(Base):
+    __tablename__ = "model_quality_recoveries"
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    model_id = Column(String(36), ForeignKey("models.id"), nullable=False, index=True)
+    query_id = Column(String(50), nullable=False)
+    original_quality_score = Column(Float, nullable=False)
+    final_quality_score = Column(Float, nullable=True)
+    action_taken = Column(String(20), nullable=False)
+    revision_attempts = Column(Integer, default=0)
+    recovery_model = Column(String(150), nullable=True)
+    recovery_model_id = Column(String(36), nullable=True)
+    recovery_cost_usd = Column(Float, default=0.0)
+    recovery_latency_ms = Column(Float, default=0.0)
+    created_at = Column(DateTime(timezone=True), default=_now, nullable=False)
